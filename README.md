@@ -26,6 +26,24 @@ npm run check          # lint, format check, type check, tests and build
 
 The probes answer on port 8080 (`/health/live`, `/health/ready`) and Prometheus metrics on port 9464 (`/metrics`). Readiness turns on once the queue is subscribed.
 
+### Try it with a local Matomo
+
+This runs the whole chain on your machine: demo events from mail, chat and drive go through RabbitMQ and the bridge, and show up in Matomo.
+
+```bash
+docker compose --profile matomo up -d --wait
+scripts/matomo-setup.sh >> .env   # installs Matomo, one site per app, appends the settings
+echo "AMQP_URL=amqp://guest:guest@localhost:5672" >> .env
+grep -q '^PSEUDONYM_PEPPER=' .env || echo "PSEUDONYM_PEPPER=$(openssl rand -hex 32)" >> .env
+npm run dev                       # leave it running: it declares the queue
+npm run demo                      # in another terminal: a week of activity for 25 users
+docker compose exec matomo php console core:archive --url=http://localhost/
+```
+
+Then open http://localhost:8081 (login `admin`, password `admin-local-only-1`). Each app is a site. Visitors > User IDs lists the pseudonymous users, Behaviour > Events > Event Actions counts what they did, and Visitors > tenant splits them by organization. Matomo builds reports by archiving, which the last command does on demand.
+
+Events published before the bridge first starts are lost, because nothing binds a queue to the exchange yet. The demo publishes with the `mandatory` flag, so it stops with an error in that case.
+
 ## Events
 
 An app reports that it saw a user by publishing a [CloudEvent](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md) on the `user-activity` topic exchange, with the event type as routing key.
