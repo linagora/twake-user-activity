@@ -78,7 +78,18 @@ With `BILLING_EXCHANGE` set (cloudery's `billing`), the bridge also binds `subsc
 
 Replicas consume in parallel, so two changes for one user a moment apart can reach the backend out of order. Matomo orders them by time. In PostHog the last one to arrive sets `paying`.
 
-The event rules below apply to both kinds of message.
+### Feature counts from the feed
+
+The apps already publish what people do on the `activity` exchange, the feed Twake Space reads: `com.twake.tasks.task.assigned.v1`, `com.twake.calendar.event.accepted.v1` and so on. With `FEED_EXCHANGE` set to it, the bridge binds `com.twake.#` to the same queue and counts each event that names a person, so feature counts need no new publisher.
+
+- The hit belongs to the app in the type, under the person in `twakeactor`, with the object and action as its action: `task.assigned`.
+- An event without `time` or a `twakeactor` address is skipped: an organization token acted, or nobody did (a received mail). The feed belongs to the apps, so a message the bridge cannot read is skipped too, never dead lettered.
+- The `user.active` heartbeat is skipped, since the activity source already counts it.
+- A provisioned space is skipped, and so is an app the backend has no report for (an app missing from `MATOMO_SITES`), instead of being dead lettered.
+- An action an assistant took for its owner carries the owner as actor, so it counts as the owner's.
+- Unsetting `FEED_EXCHANGE` later leaves the binding on the durable queue. Remove it by hand (`rabbitmqadmin delete binding source=activity destination=user-activity.ingest destination_type=queue properties_key=com.twake.%23`), or the bridge drops every feed event as a malformed activity.
+
+The event rules below apply to every kind of message.
 
 - A message that is not JSON goes to the dead letter queue.
 - A JSON message that is not a valid activity is logged and dropped.
@@ -100,6 +111,7 @@ All settings come from the environment and are checked at startup. An invalid en
 - `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.
 - `AMQP_MESSAGE_TTL_MS`, `AMQP_DELIVERY_LIMIT`: 72 hours and `20` by default.
 - `BILLING_EXCHANGE`: the exchange cloudery publishes subscription changes on, usually `billing`. The bridge only checks that it exists and stops at startup when it does not. Unset, the bridge records activity only. With Matomo, `MATOMO_SITES` then needs a `billing` site.
+- `FEED_EXCHANGE`: the apps' feed exchange, usually `activity`. Like `BILLING_EXCHANGE`, it must exist, and unset turns the feed off.
 - `BATCH_SIZE`, `BATCH_WAIT_MS`: hits per backend request and how long a batch waits to fill, `100` and `1000` by default. `BATCH_SIZE` cannot exceed `AMQP_PREFETCH`.
 - `ANALYTICS_TIMEOUT_MS`: backend request timeout, `10000` by default.
 - `HTTP_HOST`: address to listen on, `0.0.0.0` by default.

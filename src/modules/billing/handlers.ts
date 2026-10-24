@@ -28,7 +28,7 @@ export function billingSource(exchange: string, deps: SourceDeps): Source {
 }
 
 export function billingHandler(
-  deps: SourceDeps
+  deps: Pick<SourceDeps, 'pepper' | 'track'>
 ): (body: unknown, publishedAt?: Date) => Promise<void> {
   return async (body, publishedAt = new Date()) => {
     const parsed = subscriptionChanged.safeParse(body)

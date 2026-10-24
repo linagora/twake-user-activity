@@ -40,7 +40,7 @@ export function activitySource(exchange: string, deps: SourceDeps): Source {
 }
 
 export function activityHandler(
-  deps: SourceDeps
+  deps: Pick<SourceDeps, 'pepper' | 'track'>
 ): (body: unknown) => Promise<void> {
   return async body => {
     const envelope = parseCloudEvent(body)

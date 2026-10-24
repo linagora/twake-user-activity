@@ -23,7 +23,7 @@ A backend outage does not fail either probe. The bridge keeps the messages in th
 
 Prometheus text on `:9464/metrics`.
 
-- `twake_user_activity_events_total{outcome}`: handler attempts. `handled` went to the backend, `dropped` was not a valid activity, `dead_lettered` was refused by the backend, `failed` will be retried. A retried message counts once per attempt.
+- `twake_user_activity_events_total{outcome}`: handler attempts. `handled` went to the backend or was a feed event the bridge skips, `dropped` was not a valid activity, `dead_lettered` was refused by the backend, `failed` will be retried. A retried message counts once per attempt.
 - `twake_user_activity_backend_requests_seconds{backend,result}`: a summary of backend batch requests. `result` is `ok`, `unreachable` for a network error or timeout, the HTTP status when the backend answered with an error, or `error` when Matomo answered 200 without tracking the batch.
 
 Alerts worth having:

@@ -3,6 +3,7 @@ import type { Config } from '../config.ts'
 import type { Hit } from '../product/port.ts'
 import { activitySource } from './activity/handlers.ts'
 import { billingSource } from './billing/handlers.ts'
+import { feedSource } from './feed/handlers.ts'
 
 export type Handle = (
   body: unknown,
@@ -21,19 +22,24 @@ export interface Source {
 export interface SourceDeps {
   pepper: string
   track: (hit: Hit) => Promise<void>
+  // Whether the backend reports on an app at all.
+  tracks: (app: string) => boolean
 }
 
 // The bridge's own exchange comes first: its routing key names the queue's
 // dead letters. A source whose exchange is unset is off.
 export function configuredSources(
-  config: Pick<Config, 'AMQP_EXCHANGE' | 'BILLING_EXCHANGE'>,
+  config: Pick<Config, 'AMQP_EXCHANGE' | 'BILLING_EXCHANGE' | 'FEED_EXCHANGE'>,
   deps: SourceDeps
 ): [Source, ...Source[]] {
   return [
     activitySource(config.AMQP_EXCHANGE, deps),
     ...(config.BILLING_EXCHANGE === undefined
       ? []
-      : [billingSource(config.BILLING_EXCHANGE, deps)])
+      : [billingSource(config.BILLING_EXCHANGE, deps)]),
+    ...(config.FEED_EXCHANGE === undefined
+      ? []
+      : [feedSource(config.FEED_EXCHANGE, deps)])
   ]
 }
 
