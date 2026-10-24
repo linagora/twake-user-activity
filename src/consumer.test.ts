@@ -55,6 +55,16 @@ async function start() {
   const tracker = fakeTracker()
   const stats = consumerStats()
   const batcher = createBatcher({ tracker, size: 10, waitMs: 20 })
+  const publisher = new RabbitMQClient({ url: AMQP_URL, logger })
+  await publisher.init()
+  clients.push(publisher)
+  const publish = (body: Record<string, unknown>) =>
+    publisher.publish(name, String(body.type), body)
+  const publishBilling = (body: Record<string, unknown>) =>
+    publisher.publish(`${name}.billing`, BILLING_ROUTING_KEY, body)
+  // The bridge only checks for the billing exchange, so stand in for cloudery,
+  // whose first publish declares it. Nothing is bound yet: this one is dropped.
+  await publishBilling({})
   const consumer = await startConsumer(
     config,
     logger,
@@ -66,13 +76,7 @@ async function start() {
       track: hit => batcher.submit(hit)
     })
   )
-  const publisher = new RabbitMQClient({ url: AMQP_URL, logger })
-  await publisher.init()
-  clients.push(consumer, publisher)
-  const publish = (body: Record<string, unknown>) =>
-    publisher.publish(name, String(body.type), body)
-  const publishBilling = (body: Record<string, unknown>) =>
-    publisher.publish(`${name}.billing`, BILLING_ROUTING_KEY, body)
+  clients.push(consumer)
   return { tracker, stats, publish, publishBilling }
 }
 

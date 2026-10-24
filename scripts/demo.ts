@@ -5,7 +5,7 @@ import { RabbitMQClient } from '@linagora/rabbitmq-client'
 
 const AMQP_URL = process.env.AMQP_URL ?? 'amqp://guest:guest@localhost:5672'
 const EXCHANGE = process.env.AMQP_EXCHANGE ?? 'user-activity'
-const BILLING_EXCHANGE = process.env.BILLING_EXCHANGE ?? 'billing'
+const BILLING_EXCHANGE = process.env.BILLING_EXCHANGE
 const USERS = Number(process.env.DEMO_USERS ?? 25)
 const DAYS = Number(process.env.DEMO_DAYS ?? 7)
 
@@ -64,7 +64,7 @@ for (let user = 0; user < USERS; user++) {
   }
 }
 // A third of the users pay, as cloudery reports it on the billing exchange.
-for (let user = 0; user < USERS; user += 3) {
+for (let user = 0; BILLING_EXCHANGE && user < USERS; user += 3) {
   await client.publish(
     BILLING_EXCHANGE,
     'subscription.changed',
