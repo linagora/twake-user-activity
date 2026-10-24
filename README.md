@@ -40,7 +40,7 @@ npm run demo                      # in another terminal: a week of activity for 
 docker compose exec matomo php console core:archive --url=http://localhost/
 ```
 
-Then open http://localhost:8081 (login `admin`, password `admin-local-only-1`). Each app is a site. Visitors > User IDs lists the pseudonymous users, Behaviour > Events > Event Actions counts what they did, and Visitors > tenant splits them by organization. Matomo builds reports by archiving, which the last command does on demand.
+Then open http://localhost:8081 (login `admin`, password `admin-local-only-1`). Each app is a site. Visitors > User IDs lists the pseudonymous users, Behaviour > Events > Event Actions counts what they did, and Visitors > tenant and Visitors > platform split them by organization and by client. Matomo builds reports by archiving, which the last command does on demand.
 
 Events published before the bridge first starts are lost, because nothing binds a queue to the exchange yet. The demo publishes with the `mandatory` flag, so it stops with an error in that case.
 
@@ -55,6 +55,7 @@ An app reports that it saw a user by publishing a [CloudEvent](https://github.co
 - `twakeorg`: the tenant. Optional.
 - `data.category`: `foreground` or `background`. Optional, `unclassified` when absent.
 - `data.action`: a short name for what the user did. Optional.
+- `data.platform`: `web`, `desktop` or `mobile`, the client the user was on. Optional.
 
 The bridge binds `com.twake.*.user.active.v1` to the quorum queue `user-activity.ingest`. Its dead letter queue is `user-activity.ingest.dlq`.
 
@@ -72,7 +73,7 @@ All settings come from the environment and are checked at startup. An invalid en
 - `ANALYTICS_BACKEND`: `matomo` (default) or `posthog`. Only the selected backend's settings are required.
 - `MATOMO_URL`, `MATOMO_TOKEN`: Matomo base URL and a token allowed to track on every site.
 - `MATOMO_SITES`: JSON map of app to Matomo site id, for example `{"mail":3,"chat":2}`. Events from an app missing here are dead lettered.
-- `MATOMO_TENANT_DIMENSION`: id of the custom dimension that stores the tenant. Optional.
+- `MATOMO_DIMENSIONS`: JSON map of field to the id of the visit dimension that stores it, for example `{"tenant":1,"platform":2}`. The fields are `tenant` and `platform`, and a field missing here is not sent. Optional.
 - `POSTHOG_HOST`, `POSTHOG_API_KEY`: PostHog ingestion host and project API key.
 - `AMQP_EXCHANGE`, `AMQP_QUEUE`, `AMQP_DEAD_LETTER_EXCHANGE`: `user-activity`, `user-activity.ingest` and `<queue>.dlx` by default.
 - `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.

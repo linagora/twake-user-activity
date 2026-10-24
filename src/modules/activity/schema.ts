@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { appName } from '../../config.ts'
 import type { CloudEvent } from '../../events/envelope.ts'
+import { PLATFORMS, type Platform } from '../../product/port.ts'
 
 export const TYPE_PATTERN = /^com\.twake\.([^.]+)\.user\.active\.v1$/
 
@@ -16,7 +17,8 @@ const activity = z.object({
   data: z
     .object({
       category: z.enum(['background', 'foreground']).optional(),
-      action: z.string().min(1).max(255).optional()
+      action: z.string().min(1).max(255).optional(),
+      platform: z.enum(PLATFORMS).optional()
     })
     .default({})
 })
@@ -27,6 +29,7 @@ export interface Activity {
   time: Date
   category?: 'background' | 'foreground'
   action?: string
+  platform?: Platform
   org?: string
 }
 
@@ -49,6 +52,7 @@ export function parseActivity(event: CloudEvent): ActivityResult {
       time: new Date(time),
       ...(data.category !== undefined && { category: data.category }),
       ...(data.action !== undefined && { action: data.action }),
+      ...(data.platform !== undefined && { platform: data.platform }),
       ...(twakeorg !== undefined && { org: twakeorg })
     }
   }

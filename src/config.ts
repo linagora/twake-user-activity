@@ -24,6 +24,19 @@ const sites = json.pipe(
     .refine(sites => Object.keys(sites).length > 0, 'needs at least one app')
 )
 
+// For example {"tenant":1,"platform":2}: the ids Matomo gave the dimensions.
+const dimensions = json.pipe(
+  z
+    .strictObject({
+      tenant: z.number().int().min(1).optional(),
+      platform: z.number().int().min(1).optional()
+    })
+    .refine(dims => {
+      const ids = Object.values(dims)
+      return new Set(ids).size === ids.length
+    }, 'each field needs its own dimension')
+)
+
 const HOURS_72_MS = 72 * 3_600_000
 
 const BACKEND_KEYS = {
@@ -38,7 +51,7 @@ const backend = z
     MATOMO_URL: z.url({ protocol: /^https?$/ }).optional(),
     MATOMO_TOKEN: z.string().min(1).optional(),
     MATOMO_SITES: sites.optional(),
-    MATOMO_TENANT_DIMENSION: count(1).optional(),
+    MATOMO_DIMENSIONS: dimensions.default({}),
     POSTHOG_HOST: z.url({ protocol: /^https?$/ }).optional(),
     POSTHOG_API_KEY: z.string().min(1).optional()
   })
@@ -69,9 +82,7 @@ const backend = z
         url: env.MATOMO_URL ?? '',
         token: env.MATOMO_TOKEN ?? '',
         sites: env.MATOMO_SITES ?? {},
-        ...(env.MATOMO_TENANT_DIMENSION !== undefined && {
-          tenantDimension: env.MATOMO_TENANT_DIMENSION
-        })
+        dimensions: env.MATOMO_DIMENSIONS
       }
     }
   })

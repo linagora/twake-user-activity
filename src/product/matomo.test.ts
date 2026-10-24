@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matomoTracker } from './matomo.ts'
+import { matomoTracker, type MatomoDimensions } from './matomo.ts'
 import type { Hit } from './port.ts'
 import { json, stubFetch } from './testing.ts'
 
@@ -10,15 +10,19 @@ const hit = (overrides: Partial<Hit> = {}): Hit => ({
   category: 'background',
   action: 'email.read',
   tenant: 'org.example.com',
+  platform: 'mobile',
   ...overrides
 })
 
-const tracker = (fetch: typeof globalThis.fetch) =>
+const tracker = (
+  fetch: typeof globalThis.fetch,
+  dimensions: MatomoDimensions = { tenant: 1, platform: 2 }
+) =>
   matomoTracker({
     url: 'https://matomo.example.com/analytics',
     token: 'secret',
     sites: { mail: 3, chat: 2 },
-    tenantDimension: 1,
+    dimensions,
     timeoutMs: 1000,
     fetch
   })
@@ -49,8 +53,20 @@ describe('matomoTracker', () => {
       e_c: 'background',
       e_a: 'email.read',
       ua: 'twake-user-activity',
-      dimension1: 'org.example.com'
+      dimension1: 'org.example.com',
+      dimension2: 'mobile'
     })
+  })
+
+  it('leaves out a dimension the config lacks', async () => {
+    const { fetch, calls } = stubFetch(
+      json({ status: 'success', invalid_indices: [] })
+    )
+    await tracker(fetch, { platform: 2 }).track([hit()])
+    const [request] = (calls[0]?.body as { requests: string[] }).requests
+    const params = new URLSearchParams(request)
+    expect(params.has('dimension1')).toBe(false)
+    expect(params.get('dimension2')).toBe('mobile')
   })
 
   it('refuses an app with no site without sending it', async () => {

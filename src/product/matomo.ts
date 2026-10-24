@@ -8,7 +8,8 @@ export interface MatomoOptions {
   /** One Matomo site per app, so per-app reports need no segment. */
   sites: Readonly<Record<string, number>>
   timeoutMs: number
-  tenantDimension?: number
+  /** The Matomo custom dimension that stores each optional hit field. */
+  dimensions: MatomoDimensions
   fetch?: typeof fetch
   stats?: CallStats
 }
@@ -20,10 +21,15 @@ const bulkResponse = z.object({
 
 const USER_AGENT = 'twake-user-activity'
 
+export interface MatomoDimensions {
+  tenant?: number | undefined
+  platform?: number | undefined
+}
+
 export function trackingQuery(
   hit: Hit,
   site: number,
-  tenantDimension?: number
+  dimensions: MatomoDimensions
 ): string {
   const params = new URLSearchParams({
     idsite: String(site),
@@ -38,8 +44,12 @@ export function trackingQuery(
     // fetch's default "node" does.
     ua: USER_AGENT
   })
-  if (tenantDimension !== undefined && hit.tenant !== undefined) {
-    params.set(`dimension${String(tenantDimension)}`, hit.tenant)
+  for (const field of ['tenant', 'platform'] as const) {
+    const id = dimensions[field]
+    const value = hit[field]
+    if (id !== undefined && value !== undefined) {
+      params.set(`dimension${String(id)}`, value)
+    }
   }
   return `?${params.toString()}`
 }
@@ -63,7 +73,7 @@ export function matomoTracker(options: MatomoOptions): Tracker {
           return
         }
         sent.push(index)
-        requests.push(trackingQuery(hit, site, options.tenantDimension))
+        requests.push(trackingQuery(hit, site, options.dimensions))
       })
       if (requests.length === 0) return { refused }
 

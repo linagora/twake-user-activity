@@ -20,7 +20,8 @@ describe('posthogTracker', () => {
         time: new Date('2026-10-24T10:30:00Z'),
         category: 'foreground',
         action: 'message.sent',
-        tenant: 'org.example.com'
+        tenant: 'org.example.com',
+        platform: 'web'
       },
       {
         app: 'sso',
@@ -44,7 +45,8 @@ describe('posthogTracker', () => {
               properties: {
                 app: 'chat',
                 category: 'foreground',
-                tenant: 'org.example.com'
+                tenant: 'org.example.com',
+                platform: 'web'
               }
             },
             {
