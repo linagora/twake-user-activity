@@ -1,7 +1,14 @@
 export interface Recorded {
   url: string
   body: unknown
+  headers: Record<string, string>
 }
+
+// A form arrives as its fields, so tests compare plain objects either way.
+const decode = (body: RequestInit['body']): unknown =>
+  body instanceof URLSearchParams
+    ? Object.fromEntries(body)
+    : JSON.parse(typeof body === 'string' ? body : 'null')
 
 /** A fetch that answers each call with the next response, and records it. */
 export function stubFetch(...responses: (Response | Error)[]) {
@@ -14,7 +21,8 @@ export function stubFetch(...responses: (Response | Error)[]) {
           : typeof input === 'string'
             ? input
             : input.url,
-      body: JSON.parse(typeof init?.body === 'string' ? init.body : 'null')
+      body: decode(init?.body),
+      headers: Object.fromEntries(new Headers(init?.headers))
     })
     const next = responses.shift()
     if (!next) throw new Error('unexpected call')

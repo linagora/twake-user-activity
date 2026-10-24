@@ -13,12 +13,36 @@ export interface Posted {
   done: (result: string) => void
 }
 
-// Throws ProductError for an unreachable backend or a non-2xx answer; the
-// caller reads a 2xx body and calls `done` itself.
-export async function postJson(
+interface PostOptions {
+  timeoutMs: number
+  fetch?: typeof fetch
+  stats?: CallStats
+  headers?: Record<string, string>
+}
+
+export const postJson = (
   url: URL,
   body: unknown,
-  options: { timeoutMs: number; fetch?: typeof fetch; stats?: CallStats }
+  options: PostOptions
+): Promise<Posted> =>
+  post(url, JSON.stringify(body), {
+    ...options,
+    headers: { ...options.headers, 'content-type': 'application/json' }
+  })
+
+// Matomo's reporting API reads form fields, not JSON.
+export const postForm = (
+  url: URL,
+  fields: URLSearchParams,
+  options: PostOptions
+): Promise<Posted> => post(url, fields, options)
+
+// Throws ProductError for an unreachable backend or a non-2xx answer; the
+// caller reads a 2xx body and calls `done` itself.
+async function post(
+  url: URL,
+  body: string | URLSearchParams,
+  options: PostOptions
 ): Promise<Posted> {
   const started = performance.now()
   const done = (result: string) => {
@@ -28,8 +52,8 @@ export async function postJson(
   try {
     response = await (options.fetch ?? fetch)(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      ...(options.headers !== undefined && { headers: options.headers }),
+      body,
       signal: AbortSignal.timeout(options.timeoutMs)
     })
   } catch (error) {

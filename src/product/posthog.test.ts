@@ -63,7 +63,8 @@ describe('posthogTracker', () => {
               }
             }
           ]
-        }
+        },
+        headers: { 'content-type': 'application/json' }
       }
     ])
   })
@@ -102,5 +103,30 @@ describe('posthogTracker', () => {
     ])
     const [sent] = (calls[0]?.body as { batch: { properties: object }[] }).batch
     expect(sent?.properties).toMatchObject({ $set: { paying: true } })
+  })
+
+  it('deletes a person and their events with the personal key', async () => {
+    const { fetch, calls } = stubFetch(json({ persons_found: 1 }, 202))
+    await posthogTracker({
+      host: 'https://eu.i.posthog.com',
+      apiKey: 'phc_key',
+      erasure: {
+        host: 'https://eu.posthog.com/',
+        projectId: '12345',
+        personalApiKey: 'phx_key'
+      },
+      timeoutMs: 1000,
+      fetch
+    }).forget('u')
+    expect(calls).toEqual([
+      {
+        url: 'https://eu.posthog.com/api/projects/12345/persons/bulk_delete/',
+        body: { distinct_ids: ['u'], delete_events: true },
+        headers: {
+          authorization: 'Bearer phx_key',
+          'content-type': 'application/json'
+        }
+      }
+    ])
   })
 })

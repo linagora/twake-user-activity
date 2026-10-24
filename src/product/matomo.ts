@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { endpoint, postJson } from './http.ts'
+import { endpoint, postForm, postJson } from './http.ts'
 import { ProductError, type CallStats, type Hit, type Tracker } from './port.ts'
 
 export interface MatomoOptions {
@@ -18,6 +18,18 @@ const bulkResponse = z.object({
   status: z.string(),
   invalid_indices: z.array(z.number().int()).optional()
 })
+
+const apiError = z.object({ result: z.literal('error'), message: z.string() })
+
+const dataSubjects = z.array(
+  z.looseObject({ idSite: z.coerce.number(), idVisit: z.coerce.number() })
+)
+
+// findDataSubjects returns at most 401 visits, so a long history takes several
+// rounds. A user still not gone after these retries with the delivery and
+// resumes where this left off. Few enough rounds that a delivery at the request
+// timeout ends before the liveness probe calls the consumer stuck.
+const ERASURE_ROUNDS = 10
 
 const USER_AGENT = 'twake-user-activity'
 
@@ -61,7 +73,65 @@ export function trackingQuery(
 // and invalid_indices is only returned to an authenticated request.
 export function matomoTracker(options: MatomoOptions): Tracker {
   const url = endpoint(options.url, 'matomo.php')
+  const api = endpoint(options.url, 'index.php')
+
+  // The reporting API answers 200 even to a refusal, with the reason in the body.
+  const call = async (
+    method: string,
+    fields: Record<string, string>
+  ): Promise<unknown> => {
+    const { body, done } = await postForm(
+      api,
+      new URLSearchParams({
+        module: 'API',
+        format: 'json',
+        method,
+        token_auth: options.token,
+        ...fields
+      }),
+      options
+    )
+    const error = apiError.safeParse(body)
+    if (error.success) {
+      done('error')
+      // GDPR tools need admin access, more than tracking's write access.
+      const failure = error.data.message.includes('access')
+        ? 'credentials'
+        : 'permanent'
+      throw new ProductError(
+        `Matomo refused ${method}: ${error.data.message}`,
+        failure
+      )
+    }
+    done('ok')
+    return body
+  }
+
   return {
+    async forget(user) {
+      for (let round = 0; round < ERASURE_ROUNDS; round++) {
+        const found = dataSubjects.safeParse(
+          await call('PrivacyManager.findDataSubjects', {
+            idSite: 'all',
+            segment: `userId==${user}`
+          })
+        )
+        if (!found.success) {
+          throw new ProductError('Matomo listed no visits', 'transient')
+        }
+        if (found.data.length === 0) return
+        const visits: Record<string, string> = {}
+        found.data.forEach(({ idSite, idVisit }, index) => {
+          visits[`visits[${String(index)}][idsite]`] = String(idSite)
+          visits[`visits[${String(index)}][idvisit]`] = String(idVisit)
+        })
+        await call('PrivacyManager.deleteDataSubjects', visits)
+      }
+      throw new ProductError(
+        'Matomo still holds visits of the user',
+        'transient'
+      )
+    },
     async track(hits) {
       const refused = new Set<number>()
       const sent: number[] = []
