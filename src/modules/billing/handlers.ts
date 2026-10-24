@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { BILLING_APP } from '../../config.ts'
 import { MalformedEventError } from '../../events/errors.ts'
-import type { Hit } from '../../product/port.ts'
 import { pseudonym } from '../activity/handlers.ts'
+import type { Source, SourceDeps } from '../sources.ts'
 
 export const ROUTING_KEY = 'subscription.changed'
 
@@ -12,10 +12,24 @@ const subscriptionChanged = z.looseObject({
   isPaying: z.boolean()
 })
 
-export function billingHandler(deps: {
-  pepper: string
-  track: (hit: Hit) => Promise<void>
-}): (body: unknown, publishedAt?: Date) => Promise<void> {
+export function billingSource(exchange: string, deps: SourceDeps): Source {
+  const handle = billingHandler(deps)
+  return {
+    exchange,
+    routingKeys: [ROUTING_KEY],
+    passive: true,
+    // Cloudery stamps messages in seconds.
+    handle: (body, { timestamp }) =>
+      handle(
+        body,
+        timestamp === undefined ? undefined : new Date(timestamp * 1000)
+      )
+  }
+}
+
+export function billingHandler(
+  deps: SourceDeps
+): (body: unknown, publishedAt?: Date) => Promise<void> {
   return async (body, publishedAt = new Date()) => {
     const parsed = subscriptionChanged.safeParse(body)
     if (!parsed.success) {

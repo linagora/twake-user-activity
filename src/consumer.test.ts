@@ -6,9 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { loadConfig } from './config.ts'
 import { consumerStats, startConsumer } from './infra/amqp.ts'
 import { createBatcher } from './modules/activity/batch.ts'
-import { ROUTING_KEY } from './modules/activity/schema.ts'
 import { ROUTING_KEY as BILLING_ROUTING_KEY } from './modules/billing/handlers.ts'
-import { routeMessages } from './modules/router.ts'
+import { configuredSources } from './modules/sources.ts'
 import { fakeTracker } from './product/fake.ts'
 
 // Against a real broker: docker compose up rabbitmq, or the one CI starts.
@@ -69,10 +68,8 @@ async function start() {
     config,
     logger,
     stats,
-    ROUTING_KEY,
-    routeMessages({
+    configuredSources(config, {
       pepper: config.PSEUDONYM_PEPPER,
-      billingExchange: config.BILLING_EXCHANGE,
       track: hit => batcher.submit(hit)
     })
   )

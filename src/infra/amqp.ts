@@ -2,13 +2,12 @@ import {
   DeadLetterError,
   RabbitMQClient,
   type RabbitMQMessageHandler,
-  type RabbitMQMessageProperties,
   type SubscribeOptions
 } from '@linagora/rabbitmq-client'
 import type { Logger } from 'pino'
 import type { Config } from '../config.ts'
 import { MalformedEventError, RejectedEventError } from '../events/errors.ts'
-import { ROUTING_KEY as BILLING_ROUTING_KEY } from '../modules/billing/handlers.ts'
+import { routeMessages, type Handle, type Source } from '../modules/sources.ts'
 import { ProductError } from '../product/port.ts'
 
 export type Outcome = 'handled' | 'dropped' | 'dead_lettered' | 'failed'
@@ -68,11 +67,6 @@ export function consumerAlive(
   }
 }
 
-export type Handle = (
-  body: unknown,
-  properties: RabbitMQMessageProperties
-) => Promise<void>
-
 export function deliveryHandler(
   handle: Handle,
   stats: ConsumerStats,
@@ -105,18 +99,25 @@ export function deliveryHandler(
   }
 }
 
-export function subscription(config: Config) {
+// The first source's first routing key is the subscription's own; every other
+// pair is an extra binding to the same queue.
+export function subscription(
+  config: Config,
+  sources: readonly [Source, ...Source[]]
+) {
+  const bindings = sources
+    .flatMap(({ exchange, routingKeys }) =>
+      routingKeys.map(routingKey => ({ exchange, routingKey }))
+    )
+    .slice(1)
   return {
     deadLetterExchange: config.AMQP_DEAD_LETTER_EXCHANGE,
     maxRetries: Infinity,
     maxRetryDelay: MAX_RETRY_MS,
-    ...(config.BILLING_EXCHANGE !== undefined && {
-      bindings: [
-        { exchange: config.BILLING_EXCHANGE, routingKey: BILLING_ROUTING_KEY }
-      ],
-      // Cloudery owns it: check it exists, never declare it.
-      passiveExchanges: [config.BILLING_EXCHANGE]
-    }),
+    bindings,
+    passiveExchanges: sources
+      .filter(source => source.passive)
+      .map(source => source.exchange),
     queueArguments: {
       'x-delivery-limit': config.AMQP_DELIVERY_LIMIT,
       // A backend outage longer than this dead letters the activity it covers.
@@ -129,16 +130,16 @@ export async function startConsumer(
   config: Config,
   logger: Logger,
   stats: ConsumerStats,
-  routingKey: string,
-  handle: Handle
+  sources: readonly [Source, ...Source[]]
 ): Promise<RabbitMQClient> {
   const client = await connect(config, logger, stats)
+  const [first] = sources
   await client.subscribe(
-    config.AMQP_EXCHANGE,
-    routingKey,
+    first.exchange,
+    first.routingKeys[0],
     config.AMQP_QUEUE,
-    deliveryHandler(handle, stats, logger),
-    subscription(config)
+    deliveryHandler(routeMessages(sources), stats, logger),
+    subscription(config, sources)
   )
   stats.subscribed(true)
   return client
