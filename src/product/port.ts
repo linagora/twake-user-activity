@@ -44,6 +44,8 @@ export class ProductError extends Error {
 
 export interface Tracker {
   track(hits: readonly Hit[]): Promise<TrackResult>
+  /** Erases everything the backend holds on a pseudonymous user. */
+  forget(user: string): Promise<void>
 }
 
 export interface CallStats {

@@ -71,6 +71,7 @@ describe('createBatcher', () => {
 
   it('splits a batch refused for good until only the bad hit is dead lettered', async () => {
     const tracker = {
+      forget: () => Promise.resolve(),
       track: (hits: readonly Hit[]) =>
         hits.some(h => h.action === 'bad')
           ? Promise.reject(new ProductError('bad request', 'permanent'))

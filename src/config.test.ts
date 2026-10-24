@@ -97,6 +97,44 @@ describe('loadConfig', () => {
     ).toThrow(/FEED_EXCHANGE/)
   })
 
+  it('needs a PostHog personal key and project only to erase users', () => {
+    const posthog = {
+      ...base,
+      ANALYTICS_BACKEND: 'posthog',
+      POSTHOG_HOST: 'https://eu.i.posthog.com',
+      POSTHOG_API_KEY: 'phc_key'
+    }
+    expect(() => loadConfig({ ...posthog, AUTH_EXCHANGE: 'auth' })).toThrow(
+      /POSTHOG_PERSONAL_API_KEY/
+    )
+    expect(() =>
+      loadConfig({ ...posthog, POSTHOG_PERSONAL_API_KEY: 'phx_key' })
+    ).toThrow(/POSTHOG_PROJECT_URL/)
+    expect(() =>
+      loadConfig({
+        ...posthog,
+        POSTHOG_PROJECT_URL: 'https://eu.posthog.com/settings',
+        POSTHOG_PERSONAL_API_KEY: 'phx_key'
+      })
+    ).toThrow(/project\/<id>/)
+    const config = loadConfig({
+      ...posthog,
+      B2B_EXCHANGE: 'b2b',
+      POSTHOG_PROJECT_URL: 'https://eu.posthog.com/project/12345/',
+      POSTHOG_PERSONAL_API_KEY: 'phx_key'
+    })
+    expect(config.backend).toMatchObject({
+      erasure: {
+        host: 'https://eu.posthog.com/',
+        projectId: '12345',
+        personalApiKey: 'phx_key'
+      }
+    })
+    expect(loadConfig({ ...matomo, AUTH_EXCHANGE: 'auth' }).AUTH_EXCHANGE).toBe(
+      'auth'
+    )
+  })
+
   it('reads the Matomo dimensions and refuses unknown ones', () => {
     const config = loadConfig({
       ...matomo,

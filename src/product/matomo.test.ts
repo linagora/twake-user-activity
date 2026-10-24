@@ -124,3 +124,58 @@ describe('matomoTracker', () => {
     })
   })
 })
+
+describe('matomoTracker.forget', () => {
+  const user = 'f'.repeat(64)
+  const visit = (idSite: number, idVisit: number) => ({
+    idSite,
+    idVisit,
+    userId: user
+  })
+
+  it('deletes every visit of the user until none is left', async () => {
+    const { fetch, calls } = stubFetch(
+      json([visit(3, 10), visit(2, 11)]),
+      json({ log_visit: 2 }),
+      json([])
+    )
+    await tracker(fetch).forget(user)
+    expect(calls.map(call => call.url)).toEqual(
+      Array(3).fill('https://matomo.example.com/analytics/index.php')
+    )
+    expect(calls[0]?.body).toMatchObject({
+      method: 'PrivacyManager.findDataSubjects',
+      idSite: 'all',
+      segment: `userId==${user}`,
+      token_auth: 'secret'
+    })
+    expect(calls[1]?.body).toMatchObject({
+      method: 'PrivacyManager.deleteDataSubjects',
+      'visits[0][idsite]': '3',
+      'visits[0][idvisit]': '10',
+      'visits[1][idsite]': '2',
+      'visits[1][idvisit]': '11'
+    })
+  })
+
+  it('erases a user Matomo never saw without deleting anything', async () => {
+    const { fetch, calls } = stubFetch(json([]))
+    await tracker(fetch).forget(user)
+    expect(calls).toHaveLength(1)
+  })
+
+  it.each([
+    [
+      'a token without admin access',
+      "You can't access this resource as it requires admin access for at least one website.",
+      'credentials'
+    ],
+    ['any other refusal', 'Invalid segment', 'permanent']
+  ])('classifies %s', async (_name, message, failure) => {
+    const { fetch } = stubFetch(json({ result: 'error', message }))
+    await expect(tracker(fetch).forget(user)).rejects.toMatchObject({
+      name: 'ProductError',
+      failure
+    })
+  })
+})

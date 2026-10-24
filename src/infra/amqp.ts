@@ -154,7 +154,8 @@ async function connect(
     url: config.AMQP_URL,
     prefetch: config.AMQP_PREFETCH,
     retryDelay: FIRST_RETRY_MS,
-    // A delivery waits for its batch and for one backend call at most.
+    // A delivery waits for its batch and for one backend call at most. An
+    // erasure makes several calls; cut short, it is redelivered and resumes.
     closeTimeout: config.BATCH_WAIT_MS + config.ANALYTICS_TIMEOUT_MS + 1000,
     // The client logs every message at info.
     logger: logger.child({ component: 'amqp' }, { level: 'warn' }),

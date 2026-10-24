@@ -7,6 +7,7 @@ import { loadConfig } from './config.ts'
 import { consumerStats, startConsumer } from './infra/amqp.ts'
 import { createBatcher } from './modules/activity/batch.ts'
 import { ROUTING_KEY as BILLING_ROUTING_KEY } from './modules/billing/handlers.ts'
+import { ROUTING_KEYS } from './modules/erasure/handlers.ts'
 import { configuredSources } from './modules/sources.ts'
 import { reportsOn } from './product/tracker.ts'
 import { fakeTracker } from './product/fake.ts'
@@ -47,6 +48,7 @@ async function start() {
     AMQP_QUEUE: `${name}.ingest`,
     BILLING_EXCHANGE: `${name}.billing`,
     FEED_EXCHANGE: `${name}.feed`,
+    B2B_EXCHANGE: `${name}.b2b`,
     BATCH_WAIT_MS: '20',
     MATOMO_URL: 'http://matomo.invalid',
     MATOMO_TOKEN: 'unused',
@@ -65,11 +67,14 @@ async function start() {
     publisher.publish(`${name}.billing`, BILLING_ROUTING_KEY, body)
   const publishFeed = (body: Record<string, unknown>) =>
     publisher.publish(`${name}.feed`, String(body.type), body)
+  const publishB2b = (body: Record<string, unknown>) =>
+    publisher.publish(`${name}.b2b`, ROUTING_KEYS.b2b, body)
   // The bridge only checks for the exchanges others own, so stand in for their
   // owners, whose first publish declares them. Nothing is bound yet: these
   // are dropped.
   await publishBilling({})
   await publishFeed({})
+  await publishB2b({})
   const consumer = await startConsumer(
     config,
     logger,
@@ -77,11 +82,12 @@ async function start() {
     configuredSources(config, {
       pepper: config.PSEUDONYM_PEPPER,
       track: hit => batcher.submit(hit),
-      tracks: reportsOn(config.backend)
+      tracks: reportsOn(config.backend),
+      forget: user => tracker.forget(user)
     })
   )
   clients.push(consumer)
-  return { tracker, stats, publish, publishBilling, publishFeed }
+  return { tracker, stats, publish, publishBilling, publishFeed, publishB2b }
 }
 
 describe('consumer', () => {
@@ -118,6 +124,17 @@ describe('consumer', () => {
       app: 'mail',
       action: 'message.sent'
     })
+  })
+
+  it('erases a member ldap-rest deleted', async () => {
+    const { tracker, publishB2b } = await start()
+    await publishB2b({
+      type: 'user.deleted',
+      userId: 'alice',
+      internalEmail: 'alice@example.com'
+    })
+    await until(() => tracker.forgotten.length === 1)
+    expect(tracker.forgotten[0]).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('drops a malformed event and keeps consuming', async () => {

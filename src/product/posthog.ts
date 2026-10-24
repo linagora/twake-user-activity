@@ -1,13 +1,23 @@
 import { endpoint, postJson } from './http.ts'
-import type { CallStats, Tracker } from './port.ts'
+import { ProductError, type CallStats, type Tracker } from './port.ts'
 
 export interface PostHogOptions {
   host: string
   /** The project API key, which only allows capturing events. */
   apiKey: string
+  /** Needed to erase users only: capture keys cannot delete. */
+  erasure?: PostHogErasure | undefined
   timeoutMs: number
   fetch?: typeof fetch
   stats?: CallStats
+}
+
+export interface PostHogErasure {
+  /** The app host, not the ingestion host. */
+  host: string
+  projectId: string
+  /** A personal API key with the person:write scope. */
+  personalApiKey: string
 }
 
 // PostHog answers 200 even for events that fail its validation, so it never
@@ -15,6 +25,25 @@ export interface PostHogOptions {
 export function posthogTracker(options: PostHogOptions): Tracker {
   const url = endpoint(options.host, 'batch/')
   return {
+    // Events captured before the call are deleted with the person.
+    async forget(user) {
+      const { erasure } = options
+      if (erasure === undefined) {
+        throw new ProductError('PostHog erasure is not configured', 'permanent')
+      }
+      const { done } = await postJson(
+        endpoint(
+          erasure.host,
+          `api/projects/${encodeURIComponent(erasure.projectId)}/persons/bulk_delete/`
+        ),
+        { distinct_ids: [user], delete_events: true },
+        {
+          ...options,
+          headers: { authorization: `Bearer ${erasure.personalApiKey}` }
+        }
+      )
+      done('ok')
+    },
     async track(hits) {
       const { done } = await postJson(
         url,

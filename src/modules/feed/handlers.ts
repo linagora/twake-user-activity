@@ -14,7 +14,10 @@ const feedEvent = z.looseObject({
   twakeorg: z.string().min(1).max(255).optional()
 })
 
-export function feedSource(exchange: string, deps: SourceDeps): Source {
+export function feedSource(
+  exchange: string,
+  deps: Pick<SourceDeps, 'pepper' | 'track' | 'tracks'>
+): Source {
   return {
     exchange,
     routingKeys: ['com.twake.#'],
