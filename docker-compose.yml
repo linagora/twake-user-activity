@@ -1,8 +1,50 @@
+# RabbitMQ by default. `--profile matomo` adds a local Matomo on port 8081,
+# which scripts/matomo-setup.sh installs and configures.
 services:
   rabbitmq:
     image: rabbitmq:4.1-management-alpine
     # The image sets no USER, so without it the broker runs as root.
     user: '999:999'
     ports:
-      - '5672:5672'
-      - '15672:15672'
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+
+  mariadb:
+    profiles: [matomo]
+    image: mariadb:11.4
+    user: '999:999'
+    environment:
+      MARIADB_ROOT_PASSWORD: matomo
+      MARIADB_DATABASE: matomo
+      MARIADB_USER: matomo
+      MARIADB_PASSWORD: matomo
+    volumes:
+      - mariadb:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      retries: 30
+
+  matomo:
+    profiles: [matomo]
+    image: matomo:5-apache
+    # Apache runs as www-data, which may bind port 80 thanks to the sysctl.
+    user: '33:33'
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      MATOMO_DATABASE_HOST: mariadb
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo
+      MATOMO_DATABASE_DBNAME: matomo
+    ports:
+      - '127.0.0.1:8081:80'
+    volumes:
+      - matomo:/var/www/html
+
+volumes:
+  mariadb:
+  matomo:
