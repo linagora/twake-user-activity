@@ -3,6 +3,7 @@ import type { Config } from '../config.ts'
 import type { Hit } from '../product/port.ts'
 import { activitySource } from './activity/handlers.ts'
 import { billingSource } from './billing/handlers.ts'
+import { erasureSource, ROUTING_KEYS } from './erasure/handlers.ts'
 import { feedSource } from './feed/handlers.ts'
 
 export type Handle = (
@@ -24,22 +25,36 @@ export interface SourceDeps {
   track: (hit: Hit) => Promise<void>
   // Whether the backend reports on an app at all.
   tracks: (app: string) => boolean
+  forget: (user: string) => Promise<void>
 }
 
 // The bridge's own exchange comes first: its routing key names the queue's
 // dead letters. A source whose exchange is unset is off.
 export function configuredSources(
-  config: Pick<Config, 'AMQP_EXCHANGE' | 'BILLING_EXCHANGE' | 'FEED_EXCHANGE'>,
+  config: Pick<
+    Config,
+    | 'AMQP_EXCHANGE'
+    | 'BILLING_EXCHANGE'
+    | 'FEED_EXCHANGE'
+    | 'AUTH_EXCHANGE'
+    | 'B2B_EXCHANGE'
+  >,
   deps: SourceDeps
 ): [Source, ...Source[]] {
+  const optional = (
+    exchange: string | undefined,
+    source: (exchange: string) => Source
+  ) => (exchange === undefined ? [] : [source(exchange)])
   return [
     activitySource(config.AMQP_EXCHANGE, deps),
-    ...(config.BILLING_EXCHANGE === undefined
-      ? []
-      : [billingSource(config.BILLING_EXCHANGE, deps)]),
-    ...(config.FEED_EXCHANGE === undefined
-      ? []
-      : [feedSource(config.FEED_EXCHANGE, deps)])
+    ...optional(config.BILLING_EXCHANGE, e => billingSource(e, deps)),
+    ...optional(config.FEED_EXCHANGE, e => feedSource(e, deps)),
+    ...optional(config.AUTH_EXCHANGE, e =>
+      erasureSource(e, ROUTING_KEYS.auth, deps)
+    ),
+    ...optional(config.B2B_EXCHANGE, e =>
+      erasureSource(e, ROUTING_KEYS.b2b, deps)
+    )
   ]
 }
 

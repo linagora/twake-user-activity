@@ -9,7 +9,9 @@ function route() {
       {
         AMQP_EXCHANGE: 'user-activity',
         BILLING_EXCHANGE: 'billing',
-        FEED_EXCHANGE: undefined
+        FEED_EXCHANGE: undefined,
+        AUTH_EXCHANGE: undefined,
+        B2B_EXCHANGE: undefined
       },
       {
         pepper: 'a-pepper-that-is-at-least-32-characters',
@@ -17,7 +19,8 @@ function route() {
           hits.push(hit)
           return Promise.resolve()
         },
-        tracks: () => true
+        tracks: () => true,
+        forget: () => Promise.resolve()
       }
     )
   )
@@ -26,17 +29,46 @@ function route() {
 
 const changed = { internalEmail: 'alice@example.com', isPaying: true }
 
+const deps = {
+  pepper: 'unused',
+  track: () => Promise.resolve(),
+  tracks: () => true,
+  forget: () => Promise.resolve()
+}
+
 describe('configuredSources', () => {
   it('reads only the bridge exchange when the others are off', () => {
     const sources = configuredSources(
       {
         AMQP_EXCHANGE: 'user-activity',
         BILLING_EXCHANGE: undefined,
-        FEED_EXCHANGE: undefined
+        FEED_EXCHANGE: undefined,
+        AUTH_EXCHANGE: undefined,
+        B2B_EXCHANGE: undefined
       },
-      { pepper: 'unused', track: () => Promise.resolve(), tracks: () => true }
+      deps
     )
     expect(sources.map(source => source.exchange)).toEqual(['user-activity'])
+  })
+
+  it('reads deletions from both ldap-rest exchanges', () => {
+    const sources = configuredSources(
+      {
+        AMQP_EXCHANGE: 'user-activity',
+        BILLING_EXCHANGE: undefined,
+        FEED_EXCHANGE: undefined,
+        AUTH_EXCHANGE: 'auth',
+        B2B_EXCHANGE: 'b2b'
+      },
+      deps
+    )
+    expect(
+      sources.map(({ exchange, routingKeys }) => [exchange, routingKeys[0]])
+    ).toEqual([
+      ['user-activity', 'com.twake.*.user.active.v1'],
+      ['auth', 'user.deleted'],
+      ['b2b', 'domain.user.deleted']
+    ])
   })
 })
 

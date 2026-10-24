@@ -32,18 +32,24 @@ const metrics = createServer({ logger, isReady: () => Promise.resolve(true) })
 registerMetrics(metrics, { consumer, backend: config.backend.kind, calls })
 await metrics.listen({ host: config.HTTP_HOST, port: config.METRICS_PORT })
 
+const tracker = createTracker(config.backend, {
+  timeoutMs: config.ANALYTICS_TIMEOUT_MS,
+  stats: calls
+})
 const batcher = createBatcher({
-  tracker: createTracker(config.backend, {
-    timeoutMs: config.ANALYTICS_TIMEOUT_MS,
-    stats: calls
-  }),
+  tracker,
   size: config.BATCH_SIZE,
   waitMs: config.BATCH_WAIT_MS
 })
 const sources = configuredSources(config, {
   pepper: config.PSEUDONYM_PEPPER,
   track: hit => batcher.submit(hit),
-  tracks: reportsOn(config.backend)
+  tracks: reportsOn(config.backend),
+  // The user's hits waiting here go first, or they would outlive the erasure.
+  forget: async user => {
+    await batcher.flush()
+    await tracker.forget(user)
+  }
 })
 
 const client = await startConsumer(config, logger, consumer, sources)

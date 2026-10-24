@@ -89,6 +89,16 @@ The apps already publish what people do on the `activity` exchange, the feed Twa
 - An action an assistant took for its owner carries the owner as actor, so it counts as the owner's.
 - Unsetting `FEED_EXCHANGE` later leaves the binding on the durable queue. Remove it by hand (`rabbitmqadmin delete binding source=activity destination=user-activity.ingest destination_type=queue properties_key=com.twake.%23`), or the bridge drops every feed event as a malformed activity.
 
+### Erasing deleted users
+
+ldap-rest announces a deleted account on `auth` (`user.deleted`, a B2C account) and on `b2b` (`domain.user.deleted`, an organization member, including every member of a deleted organization). With `AUTH_EXCHANGE` and `B2B_EXCHANGE` set to them, the bridge erases everything the backend holds on that user, found by the same pseudonym as their activity. Set either one or both; unset, the bridge erases nobody.
+
+- Matomo deletes the user's visits and actions on every site and invalidates the reports built from them. Its GDPR tools need `admin` access to the app sites, so the token's user needs `admin` instead of `write` (see Security).
+- PostHog deletes the person and the events captured before the request. That takes a personal API key with the `person:write` scope, which `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_URL` give it.
+- Before erasing, a replica sends the hits it holds, so its own hits for the user are not left behind. A hit another replica is still sending can land after the erasure, and so can one of the user's events that is retried later or moved back from the dead letter queue. Nothing erases those again; a deleted user produces no new activity, so only events already queued can do this.
+- A deletion without an address is logged and dropped: there is no pseudonym to erase.
+- An erasure the backend refuses for good goes to the dead letter queue, so it is never lost. Fix the cause and move it back to the queue.
+
 The event rules below apply to every kind of message.
 
 - A message that is not JSON goes to the dead letter queue.
@@ -107,11 +117,13 @@ All settings come from the environment and are checked at startup. An invalid en
 - `MATOMO_SITES`: JSON map of app to Matomo site id, for example `{"mail":3,"chat":2}`. Events from an app missing here are dead lettered.
 - `MATOMO_DIMENSIONS`: JSON map of field to the id of the visit dimension that stores it, for example `{"tenant":1,"platform":2}`. The fields are `tenant` and `platform`, and a field missing here is not sent. Optional.
 - `POSTHOG_HOST`, `POSTHOG_API_KEY`: PostHog ingestion host and project API key.
+- `POSTHOG_PROJECT_URL`, `POSTHOG_PERSONAL_API_KEY`: the project's address as the browser shows it, such as `https://eu.posthog.com/project/12345`, and a personal API key with the `person:write` scope. Required with PostHog when users are erased, unused otherwise.
 - `AMQP_EXCHANGE`, `AMQP_QUEUE`, `AMQP_DEAD_LETTER_EXCHANGE`: `user-activity`, `user-activity.ingest` and `<queue>.dlx` by default.
 - `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.
 - `AMQP_MESSAGE_TTL_MS`, `AMQP_DELIVERY_LIMIT`: 72 hours and `20` by default.
 - `BILLING_EXCHANGE`: the exchange cloudery publishes subscription changes on, usually `billing`. The bridge only checks that it exists and stops at startup when it does not. Unset, the bridge records activity only. With Matomo, `MATOMO_SITES` then needs a `billing` site.
 - `FEED_EXCHANGE`: the apps' feed exchange, usually `activity`. Like `BILLING_EXCHANGE`, it must exist, and unset turns the feed off.
+- `AUTH_EXCHANGE`, `B2B_EXCHANGE`: the exchanges ldap-rest announces deleted accounts on, usually `auth` and `b2b`. Each must exist when set. Unset, the bridge erases nobody.
 - `BATCH_SIZE`, `BATCH_WAIT_MS`: hits per backend request and how long a batch waits to fill, `100` and `1000` by default. `BATCH_SIZE` cannot exceed `AMQP_PREFETCH`.
 - `ANALYTICS_TIMEOUT_MS`: backend request timeout, `10000` by default.
 - `HTTP_HOST`: address to listen on, `0.0.0.0` by default.
@@ -125,9 +137,9 @@ All settings come from the environment and are checked at startup. An invalid en
 What reaches the backend for each event is the app, the time, the category, the action, the tenant, the platform, the pseudonymous user id, and the user's IP address when the app sent one. Without it, the backend only sees the bridge's own IP address and learns nothing about where users are. An IP address is personal data. Matomo applies its IP anonymization setting to it; check your PostHog project's IP settings before apps start sending it. The logs carry an event's routing key, message id and the error, not its body, except for a message that is not JSON: the RabbitMQ client logs its first 100 characters at error level, which also go to Sentry when it is on.
 
 - Keep `PSEUDONYM_PEPPER` in a secret store. Anyone holding it can check whether a known address is a given user id.
-- Give Matomo a dedicated user with `write` access to the app sites only, and use its token, not a superuser's. `write` is the lowest access that accepts the past timestamps and user IP addresses the bridge sends; with `view` access Matomo refuses every hit, and the bridge dead letters them.
-- Give PostHog the public project API key, the one browsers use, never a personal API key. For an event without an IP address, the bridge turns off GeoIP, so PostHog does not place the user at the bridge's location.
-- Only apps should be allowed to publish on the `user-activity` exchange. Anyone who can publish there can add activity for any user, so restrict it with RabbitMQ permissions on the vhost.
+- Give Matomo a dedicated user with `write` access to the app sites only, and use its token, not a superuser's. `write` is the lowest access that accepts the past timestamps and user IP addresses the bridge sends; with `view` access Matomo refuses every hit, and the bridge dead letters them. Erasing users needs `admin` on the same sites, which also lets the token change their settings; give it only where erasure is on.
+- Give PostHog the public project API key, the one browsers use, for tracking. The personal API key for erasure needs only the `person:write` scope and this one project. For an event without an IP address, the bridge turns off GeoIP, so PostHog does not place the user at the bridge's location.
+- Only apps should be allowed to publish on the `user-activity` exchange. Anyone who can publish there can add activity for any user, so restrict it with RabbitMQ permissions on the vhost. The same goes for `auth` and `b2b` when erasure is on: a forged deletion erases a real user's analytics.
 - The container runs as an unprivileged user, and only the probe and metrics ports listen. Neither takes input beyond the path.
 
 ## Delivery

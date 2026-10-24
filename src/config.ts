@@ -46,6 +46,21 @@ const dimensions = json.pipe(
     }, 'each field needs its own dimension')
 )
 
+// The project's address as the browser shows it, such as
+// https://eu.posthog.com/project/12345: the app host and the project id.
+const projectUrl = z.url({ protocol: /^https?$/ }).transform((value, ctx) => {
+  const url = new URL(value)
+  const match = /^(.*\/)project\/(\d+)\/?$/.exec(url.pathname)
+  if (match === null) {
+    ctx.addIssue({ code: 'custom', message: 'must end in /project/<id>' })
+    return z.NEVER
+  }
+  return {
+    host: `${url.origin}${match[1] ?? '/'}`,
+    projectId: match[2] ?? ''
+  }
+})
+
 const HOURS_72_MS = 72 * 3_600_000
 
 const BACKEND_KEYS = {
@@ -62,9 +77,24 @@ const backend = z
     MATOMO_SITES: sites.optional(),
     MATOMO_DIMENSIONS: dimensions.default({}),
     POSTHOG_HOST: z.url({ protocol: /^https?$/ }).optional(),
-    POSTHOG_API_KEY: z.string().min(1).optional()
+    POSTHOG_API_KEY: z.string().min(1).optional(),
+    POSTHOG_PROJECT_URL: projectUrl.optional(),
+    POSTHOG_PERSONAL_API_KEY: z.string().min(1).optional()
   })
   .superRefine((env, ctx) => {
+    const erasure = ['POSTHOG_PROJECT_URL', 'POSTHOG_PERSONAL_API_KEY'] as const
+    for (const key of erasure) {
+      if (
+        env[key] === undefined &&
+        erasure.some(other => env[other] !== undefined)
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `required with ${erasure.filter(other => other !== key).join()}`
+        })
+      }
+    }
     for (const key of BACKEND_KEYS[env.ANALYTICS_BACKEND]) {
       if (env[key] === undefined) {
         ctx.addIssue({
@@ -81,7 +111,15 @@ const backend = z
         backend: {
           kind: 'posthog' as const,
           host: env.POSTHOG_HOST ?? '',
-          apiKey: env.POSTHOG_API_KEY ?? ''
+          apiKey: env.POSTHOG_API_KEY ?? '',
+          erasure:
+            env.POSTHOG_PROJECT_URL === undefined ||
+            env.POSTHOG_PERSONAL_API_KEY === undefined
+              ? undefined
+              : {
+                  ...env.POSTHOG_PROJECT_URL,
+                  personalApiKey: env.POSTHOG_PERSONAL_API_KEY
+                }
         }
       }
     }
@@ -114,6 +152,10 @@ const configSchema = z
     // The apps' feed exchange, usually activity; unset, its events are not
     // counted.
     FEED_EXCHANGE: optionalName,
+    // Where ldap-rest announces deleted accounts, usually auth (B2C) and b2b;
+    // unset, the bridge erases nobody.
+    AUTH_EXCHANGE: optionalName,
+    B2B_EXCHANGE: optionalName,
     ANALYTICS_TIMEOUT_MS: count(1).default(10_000),
     BATCH_SIZE: count(1).default(100),
     BATCH_WAIT_MS: count(0).default(1000),
@@ -142,7 +184,12 @@ const configSchema = z
       env.AMQP_EXCHANGE,
       env.AMQP_DEAD_LETTER_EXCHANGE ?? `${env.AMQP_QUEUE}.dlx`
     ])
-    for (const key of ['BILLING_EXCHANGE', 'FEED_EXCHANGE'] as const) {
+    for (const key of [
+      'BILLING_EXCHANGE',
+      'FEED_EXCHANGE',
+      'AUTH_EXCHANGE',
+      'B2B_EXCHANGE'
+    ] as const) {
       const exchange = env[key]
       if (exchange === undefined) continue
       if (seen.has(exchange)) {
@@ -163,6 +210,18 @@ const configSchema = z
         code: 'custom',
         path: ['MATOMO_SITES'],
         message: `needs a "${BILLING_APP}" site when BILLING_EXCHANGE is set`
+      })
+    }
+    if (
+      (env.AUTH_EXCHANGE !== undefined || env.B2B_EXCHANGE !== undefined) &&
+      env.backend.kind === 'posthog' &&
+      env.backend.erasure === undefined
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['POSTHOG_PERSONAL_API_KEY'],
+        message:
+          'POSTHOG_PROJECT_URL and POSTHOG_PERSONAL_API_KEY are required to erase users'
       })
     }
   })
