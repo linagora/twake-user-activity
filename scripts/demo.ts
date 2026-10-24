@@ -5,6 +5,7 @@ import { RabbitMQClient } from '@linagora/rabbitmq-client'
 
 const AMQP_URL = process.env.AMQP_URL ?? 'amqp://guest:guest@localhost:5672'
 const EXCHANGE = process.env.AMQP_EXCHANGE ?? 'user-activity'
+const BILLING_EXCHANGE = process.env.BILLING_EXCHANGE ?? 'billing'
 const USERS = Number(process.env.DEMO_USERS ?? 25)
 const DAYS = Number(process.env.DEMO_DAYS ?? 7)
 
@@ -24,8 +25,10 @@ const client = new RabbitMQClient({ url: AMQP_URL })
 await client.init()
 
 let published = 0
+const tenants: string[] = []
 for (let user = 0; user < USERS; user++) {
   const tenant = pick(TENANTS)
+  tenants.push(tenant)
   const email = `user${String(user)}@${tenant}`
   for (let day = DAYS - 1; day >= 0; day--) {
     // Some users skip days, so last-seen dates differ.
@@ -59,6 +62,22 @@ for (let user = 0; user < USERS; user++) {
       published++
     }
   }
+}
+// A third of the users pay, as cloudery reports it on the billing exchange.
+for (let user = 0; user < USERS; user += 3) {
+  await client.publish(
+    BILLING_EXCHANGE,
+    'subscription.changed',
+    {
+      twakeId: `user${String(user)}`,
+      internalEmail: `user${String(user)}@${tenants[user] ?? ''}`,
+      isPaying: true,
+      canUpgrade: false,
+      features: {}
+    },
+    { mandatory: true }
+  )
+  published++
 }
 await client.close()
 console.log(`published ${String(published)} events for ${String(USERS)} users`)

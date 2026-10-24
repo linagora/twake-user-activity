@@ -73,6 +73,7 @@ describe('activityHandler', () => {
     ['an unknown category', { data: { category: 'idle' } }],
     ['an unknown platform', { data: { platform: 'tv' } }],
     ['an address that is not an IP', { data: { ip: 'example.com' } }],
+    ['the reserved billing app', { type: 'com.twake.billing.user.active.v1' }],
     ['not a CloudEvent', { specversion: '0.3' }]
   ])('drops an event with %s', async (_name, overrides) => {
     const { hits, handle } = handler()

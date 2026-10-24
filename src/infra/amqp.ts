@@ -2,11 +2,13 @@ import {
   DeadLetterError,
   RabbitMQClient,
   type RabbitMQMessageHandler,
+  type RabbitMQMessageProperties,
   type SubscribeOptions
 } from '@linagora/rabbitmq-client'
 import type { Logger } from 'pino'
 import type { Config } from '../config.ts'
 import { MalformedEventError, RejectedEventError } from '../events/errors.ts'
+import { ROUTING_KEY as BILLING_ROUTING_KEY } from '../modules/billing/handlers.ts'
 import { ProductError } from '../product/port.ts'
 
 export type Outcome = 'handled' | 'dropped' | 'dead_lettered' | 'failed'
@@ -66,15 +68,21 @@ export function consumerAlive(
   }
 }
 
+export type Handle = (
+  body: unknown,
+  properties: RabbitMQMessageProperties
+) => Promise<void>
+
 export function deliveryHandler(
-  handle: (body: unknown) => Promise<void>,
+  handle: Handle,
   stats: ConsumerStats,
   logger: Logger
 ): RabbitMQMessageHandler {
-  return async (body, { routingKey, messageId }) => {
+  return async (body, properties) => {
+    const { routingKey, messageId } = properties
     const started = stats.started()
     try {
-      await handle(body)
+      await handle(body, properties)
       stats.ended(started, 'handled')
     } catch (error) {
       const context = { routingKey, messageId, err: error }
@@ -102,6 +110,11 @@ export function subscription(config: Config) {
     deadLetterExchange: config.AMQP_DEAD_LETTER_EXCHANGE,
     maxRetries: Infinity,
     maxRetryDelay: MAX_RETRY_MS,
+    ...(config.BILLING_EXCHANGE !== undefined && {
+      bindings: [
+        { exchange: config.BILLING_EXCHANGE, routingKey: BILLING_ROUTING_KEY }
+      ]
+    }),
     queueArguments: {
       'x-delivery-limit': config.AMQP_DELIVERY_LIMIT,
       // A backend outage longer than this dead letters the activity it covers.
@@ -115,7 +128,7 @@ export async function startConsumer(
   logger: Logger,
   stats: ConsumerStats,
   routingKey: string,
-  handle: (body: unknown) => Promise<void>
+  handle: Handle
 ): Promise<RabbitMQClient> {
   const client = await connect(config, logger, stats)
   await client.subscribe(

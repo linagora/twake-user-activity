@@ -5,8 +5,8 @@ import { loadConfig } from './config.ts'
 import { consumerAlive, consumerStats, startConsumer } from './infra/amqp.ts'
 import { backendStats, registerMetrics } from './infra/metrics.ts'
 import { createBatcher } from './modules/activity/batch.ts'
-import { activityHandler } from './modules/activity/handlers.ts'
 import { ROUTING_KEY } from './modules/activity/schema.ts'
+import { routeMessages } from './modules/router.ts'
 import { createTracker } from './product/tracker.ts'
 
 const SHUTDOWN_DEADLINE_MS = 25_000
@@ -41,8 +41,9 @@ const batcher = createBatcher({
   size: config.BATCH_SIZE,
   waitMs: config.BATCH_WAIT_MS
 })
-const handle = activityHandler({
+const handle = routeMessages({
   pepper: config.PSEUDONYM_PEPPER,
+  billingExchange: config.BILLING_EXCHANGE,
   track: hit => batcher.submit(hit)
 })
 

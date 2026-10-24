@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { appName } from '../../config.ts'
+import { appName, BILLING_APP } from '../../config.ts'
 import type { CloudEvent } from '../../events/envelope.ts'
 import { PLATFORMS, type Platform } from '../../product/port.ts'
 
@@ -46,6 +46,10 @@ export function parseActivity(event: CloudEvent): ActivityResult {
   const { type, time, twakeactor, twakeorg, data } = result.data
   const app = appName.safeParse(TYPE_PATTERN.exec(type)?.[1])
   if (!app.success) return { ok: false, error: `bad app in ${type}` }
+  // Its reports hold subscription changes only.
+  if (app.data === BILLING_APP) {
+    return { ok: false, error: `${BILLING_APP} is reserved` }
+  }
   return {
     ok: true,
     activity: {

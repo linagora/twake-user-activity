@@ -17,6 +17,9 @@ const json = z.string().transform((value, ctx) => {
 
 export const appName = z.string().regex(/^[a-z][a-z0-9-]*$/)
 
+// Subscription changes are recorded as the activity of this app.
+export const BILLING_APP = 'billing'
+
 // For example {"cozy":1,"chat":2,"mail":3,"sso":4}.
 const sites = json.pipe(
   z
@@ -100,6 +103,8 @@ const configSchema = z
     // Failures retry in the process, so a redelivery means a crash or a
     // consumer_timeout.
     AMQP_DELIVERY_LIMIT: count(1).default(20),
+    // Cloudery's exchange; unset, the bridge does not record paying status.
+    BILLING_EXCHANGE: z.string().min(1).optional(),
     ANALYTICS_TIMEOUT_MS: count(1).default(10_000),
     BATCH_SIZE: count(1).default(100),
     BATCH_WAIT_MS: count(0).default(1000),
@@ -122,6 +127,27 @@ const configSchema = z
     }
   })
   .and(backend)
+  .superRefine((env, ctx) => {
+    // The exchange is what tells a subscription change from an activity.
+    if (env.BILLING_EXCHANGE === env.AMQP_EXCHANGE) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BILLING_EXCHANGE'],
+        message: 'must differ from AMQP_EXCHANGE'
+      })
+    }
+    if (
+      env.BILLING_EXCHANGE !== undefined &&
+      env.backend.kind === 'matomo' &&
+      !Object.hasOwn(env.backend.sites, BILLING_APP)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MATOMO_SITES'],
+        message: `needs a "${BILLING_APP}" site when BILLING_EXCHANGE is set`
+      })
+    }
+  })
   .transform(env => ({
     ...env,
     AMQP_DEAD_LETTER_EXCHANGE:

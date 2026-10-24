@@ -1,6 +1,6 @@
 # Running the bridge
 
-The bridge is stateless. Run as many replicas as the queue needs: each takes up to `AMQP_PREFETCH` deliveries and RabbitMQ spreads them. Configuration is in the README.
+The bridge is stateless. Run as many replicas as the queue needs: each takes up to `AMQP_PREFETCH` deliveries and RabbitMQ spreads them. The queue has no single active consumer, so every replica works at once and order between messages is not kept. Configuration is in the README.
 
 ```mermaid
 flowchart LR
@@ -37,7 +37,7 @@ Alerts worth having:
 
 A message lands in `user-activity.ingest.dlq` when the backend refused it, when it was not JSON, or when it stayed in the main queue for 72 hours (a long backend outage). The body is the original event, untouched. Nothing expires it, so a full DLQ is a sign to act on.
 
-Once the cause is fixed, move the messages back to `user-activity.ingest`: the bridge reads the app from the event body, so the routing key does not matter. RabbitMQ's shovel does this (the "Move messages" form of the management UI, which needs the `rabbitmq_shovel` and `rabbitmq_shovel_management` plugins). Events that are still invalid come back to the DLQ.
+Once the cause is fixed, move the messages back to `user-activity.ingest`: the bridge reads the app from the event body and the source exchange from the header RabbitMQ added when it dead lettered the message, so the routing key does not matter. RabbitMQ's shovel does this (the "Move messages" form of the management UI, which needs the `rabbitmq_shovel` and `rabbitmq_shovel_management` plugins). Events that are still invalid come back to the DLQ.
 
 Matomo keeps a replayed event at its original time, so reports for past days change after the next archiving.
 

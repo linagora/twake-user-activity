@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { loadConfig } from './config.ts'
 import { consumerStats, startConsumer } from './infra/amqp.ts'
 import { createBatcher } from './modules/activity/batch.ts'
-import { activityHandler } from './modules/activity/handlers.ts'
 import { ROUTING_KEY } from './modules/activity/schema.ts'
+import { ROUTING_KEY as BILLING_ROUTING_KEY } from './modules/billing/handlers.ts'
+import { routeMessages } from './modules/router.ts'
 import { fakeTracker } from './product/fake.ts'
 
 // Against a real broker: docker compose up rabbitmq, or the one CI starts.
@@ -44,10 +45,11 @@ async function start() {
     AMQP_URL,
     AMQP_EXCHANGE: name,
     AMQP_QUEUE: `${name}.ingest`,
+    BILLING_EXCHANGE: `${name}.billing`,
     BATCH_WAIT_MS: '20',
     MATOMO_URL: 'http://matomo.invalid',
     MATOMO_TOKEN: 'unused',
-    MATOMO_SITES: '{"mail":1}',
+    MATOMO_SITES: '{"mail":1,"billing":2}',
     PSEUDONYM_PEPPER: 'a-pepper-that-is-at-least-32-characters'
   })
   const tracker = fakeTracker()
@@ -58,8 +60,9 @@ async function start() {
     logger,
     stats,
     ROUTING_KEY,
-    activityHandler({
+    routeMessages({
       pepper: config.PSEUDONYM_PEPPER,
+      billingExchange: config.BILLING_EXCHANGE,
       track: hit => batcher.submit(hit)
     })
   )
@@ -68,7 +71,9 @@ async function start() {
   clients.push(consumer, publisher)
   const publish = (body: Record<string, unknown>) =>
     publisher.publish(name, String(body.type), body)
-  return { tracker, stats, publish }
+  const publishBilling = (body: Record<string, unknown>) =>
+    publisher.publish(`${name}.billing`, BILLING_ROUTING_KEY, body)
+  return { tracker, stats, publish, publishBilling }
 }
 
 describe('consumer', () => {
@@ -81,6 +86,17 @@ describe('consumer', () => {
       ['mail', 'activity'],
       ['chat', 'message.sent']
     ])
+  })
+
+  it('records subscription changes from the billing exchange', async () => {
+    const { tracker, publishBilling } = await start()
+    await publishBilling({
+      twakeId: 'alice',
+      internalEmail: 'alice@example.com',
+      isPaying: true
+    })
+    await until(() => tracker.hits.length === 1)
+    expect(tracker.hits[0]).toMatchObject({ app: 'billing', paying: true })
   })
 
   it('drops a malformed event and keeps consuming', async () => {

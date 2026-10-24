@@ -38,8 +38,9 @@ docker compose --profile matomo up -d --wait
 scripts/matomo-setup.sh >> .env   # installs Matomo, one site per app, appends the settings
 echo "AMQP_URL=amqp://guest:guest@localhost:5672" >> .env
 grep -q '^PSEUDONYM_PEPPER=' .env || echo "PSEUDONYM_PEPPER=$(openssl rand -hex 32)" >> .env
+echo "BILLING_EXCHANGE=billing" >> .env
 npm run dev                       # leave it running: it declares the queue
-npm run demo                      # in another terminal: a week of activity for 25 users
+npm run demo                      # in another terminal: a week of activity for 25 users, a third of them paying
 docker compose exec matomo php console core:archive --url=http://localhost/
 ```
 
@@ -63,6 +64,20 @@ An app reports that it saw a user by publishing a [CloudEvent](https://github.co
 
 The bridge binds `com.twake.*.user.active.v1` to the quorum queue `user-activity.ingest`. Its dead letter queue is `user-activity.ingest.dlq`.
 
+### Paying users
+
+With `BILLING_EXCHANGE` set (cloudery's `billing`), the bridge also binds `subscription.changed` to the same queue. Cloudery publishes it for a user whose plan changed, as plain JSON with `internalEmail` and `isPaying`. The bridge records it as an event of the `billing` app, at cloudery's publish time, under the same pseudonymous user id as the user's activity.
+
+- PostHog gets a `subscription-paying` or `subscription-free` event that also sets the person property `paying`, so an insight can count paying users.
+- Matomo has no per user properties. The events land on the `billing` site, which shows changes over time but not a current count.
+- The organization level event `domain.subscription.changed` is not consumed.
+- Apps cannot publish activity as `billing`: the name is reserved for these events.
+- Unsetting `BILLING_EXCHANGE` later leaves the binding on the durable queue. Remove it by hand (`rabbitmqadmin delete binding source=billing destination=user-activity.ingest destination_type=queue properties_key=subscription.changed`), or the bridge drops each subscription change as a malformed activity.
+
+Replicas consume in parallel, so two changes for one user a moment apart can reach the backend out of order. Matomo orders them by time. In PostHog the last one to arrive sets `paying`.
+
+The event rules below apply to both kinds of message.
+
 - A message that is not JSON goes to the dead letter queue.
 - A JSON message that is not a valid activity is logged and dropped.
 - An event the backend refuses goes to the dead letter queue. When the backend refuses a whole batch, the bridge splits it until only the refused events are left.
@@ -82,6 +97,7 @@ All settings come from the environment and are checked at startup. An invalid en
 - `AMQP_EXCHANGE`, `AMQP_QUEUE`, `AMQP_DEAD_LETTER_EXCHANGE`: `user-activity`, `user-activity.ingest` and `<queue>.dlx` by default.
 - `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.
 - `AMQP_MESSAGE_TTL_MS`, `AMQP_DELIVERY_LIMIT`: 72 hours and `20` by default.
+- `BILLING_EXCHANGE`: the exchange cloudery publishes subscription changes on, usually `billing`. Unset, the bridge records activity only. With Matomo, `MATOMO_SITES` then needs a `billing` site.
 - `BATCH_SIZE`, `BATCH_WAIT_MS`: hits per backend request and how long a batch waits to fill, `100` and `1000` by default. `BATCH_SIZE` cannot exceed `AMQP_PREFETCH`.
 - `ANALYTICS_TIMEOUT_MS`: backend request timeout, `10000` by default.
 - `HTTP_HOST`: address to listen on, `0.0.0.0` by default.

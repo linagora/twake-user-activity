@@ -33,7 +33,9 @@ export function posthogTracker(options: PostHogOptions): Tracker {
               app: hit.app,
               category: hit.category,
               ...(hit.tenant !== undefined && { tenant: hit.tenant }),
-              ...(hit.platform !== undefined && { platform: hit.platform })
+              ...(hit.platform !== undefined && { platform: hit.platform }),
+              // A person property, so insights can count paying users.
+              ...(hit.paying !== undefined && { $set: { paying: hit.paying } })
             }
           }))
         },

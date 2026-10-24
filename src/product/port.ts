@@ -10,6 +10,8 @@ export interface Hit {
   platform?: Platform
   /** The user's IP address as the app saw it, for the backend's geolocation. */
   ip?: string
+  /** Set on a subscription change: whether the user now pays. */
+  paying?: boolean
 }
 
 export const PLATFORMS = ['web', 'desktop', 'mobile'] as const
