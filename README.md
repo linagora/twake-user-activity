@@ -93,6 +93,8 @@ The apps already publish what people do on the `activity` exchange, the feed Twa
 
 ldap-rest announces a deleted account on `auth` (`user.deleted`, a B2C account) and on `b2b` (`domain.user.deleted`, an organization member, including every member of a deleted organization). With `AUTH_EXCHANGE` and `B2B_EXCHANGE` set to them, the bridge erases everything the backend holds on that user, found by the same pseudonym as their activity. Set either one or both; unset, the bridge erases nobody.
 
+Erasure is off by default, and turning it on is a legal decision for each deployment, not an operational one. It changes history: the backend rebuilds past reports without the user, so the active user counts of earlier months drop after the fact.
+
 - Matomo deletes the user's visits and actions on every site and invalidates the reports built from them. Its GDPR tools need `admin` access to the app sites, so the token's user needs `admin` instead of `write` (see Security).
 - PostHog deletes the person and the events captured before the request. That takes a personal API key with the `person:write` scope, which `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_URL` give it.
 - Before erasing, a replica sends the hits it holds, so its own hits for the user are not left behind. A hit another replica is still sending can land after the erasure, and so can one of the user's events that is retried later or moved back from the dead letter queue. Nothing erases those again; a deleted user produces no new activity, so only events already queued can do this.
