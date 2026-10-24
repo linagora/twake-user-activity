@@ -66,6 +66,8 @@ The bridge binds `com.twake.*.user.active.v1` to the quorum queue `user-activity
 
 ### Paying users
 
+This is optional. An installation without cloudery, such as on premises, leaves `BILLING_EXCHANGE` unset and gets activity only.
+
 With `BILLING_EXCHANGE` set (cloudery's `billing`), the bridge also binds `subscription.changed` to the same queue. Cloudery publishes it for a user whose plan changed, as plain JSON with `internalEmail` and `isPaying`. The bridge records it as an event of the `billing` app, at cloudery's publish time, under the same pseudonymous user id as the user's activity.
 
 - PostHog gets a `subscription-paying` or `subscription-free` event that also sets the person property `paying`, so an insight can count paying users.
@@ -97,7 +99,7 @@ All settings come from the environment and are checked at startup. An invalid en
 - `AMQP_EXCHANGE`, `AMQP_QUEUE`, `AMQP_DEAD_LETTER_EXCHANGE`: `user-activity`, `user-activity.ingest` and `<queue>.dlx` by default.
 - `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.
 - `AMQP_MESSAGE_TTL_MS`, `AMQP_DELIVERY_LIMIT`: 72 hours and `20` by default.
-- `BILLING_EXCHANGE`: the exchange cloudery publishes subscription changes on, usually `billing`. Unset, the bridge records activity only. With Matomo, `MATOMO_SITES` then needs a `billing` site.
+- `BILLING_EXCHANGE`: the exchange cloudery publishes subscription changes on, usually `billing`. The bridge only checks that it exists and stops at startup when it does not. Unset, the bridge records activity only. With Matomo, `MATOMO_SITES` then needs a `billing` site.
 - `BATCH_SIZE`, `BATCH_WAIT_MS`: hits per backend request and how long a batch waits to fill, `100` and `1000` by default. `BATCH_SIZE` cannot exceed `AMQP_PREFETCH`.
 - `ANALYTICS_TIMEOUT_MS`: backend request timeout, `10000` by default.
 - `HTTP_HOST`: address to listen on, `0.0.0.0` by default.

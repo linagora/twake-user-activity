@@ -113,7 +113,9 @@ export function subscription(config: Config) {
     ...(config.BILLING_EXCHANGE !== undefined && {
       bindings: [
         { exchange: config.BILLING_EXCHANGE, routingKey: BILLING_ROUTING_KEY }
-      ]
+      ],
+      // Cloudery owns it: check it exists, never declare it.
+      passiveExchanges: [config.BILLING_EXCHANGE]
     }),
     queueArguments: {
       'x-delivery-limit': config.AMQP_DELIVERY_LIMIT,
