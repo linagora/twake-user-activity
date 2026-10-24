@@ -71,7 +71,7 @@ All settings come from the environment and are checked at startup. An invalid en
 - `AMQP_URL`: RabbitMQ URL. Required.
 - `PSEUDONYM_PEPPER`: secret used for the HMAC of the email, at least 32 characters. Required. Changing it turns every user into a new one in the backend.
 - `ANALYTICS_BACKEND`: `matomo` (default) or `posthog`. Only the selected backend's settings are required.
-- `MATOMO_URL`, `MATOMO_TOKEN`: Matomo base URL and a token allowed to track on every site.
+- `MATOMO_URL`, `MATOMO_TOKEN`: Matomo base URL and the token of a user with `write` access to every app site (see Security).
 - `MATOMO_SITES`: JSON map of app to Matomo site id, for example `{"mail":3,"chat":2}`. Events from an app missing here are dead lettered.
 - `MATOMO_DIMENSIONS`: JSON map of field to the id of the visit dimension that stores it, for example `{"tenant":1,"platform":2}`. The fields are `tenant` and `platform`, and a field missing here is not sent. Optional.
 - `POSTHOG_HOST`, `POSTHOG_API_KEY`: PostHog ingestion host and project API key.
@@ -85,6 +85,16 @@ All settings come from the environment and are checked at startup. An invalid en
 - `METRICS_PORT`: metrics port, `9464` by default.
 - `LOG_LEVEL`: pino level, `info` by default.
 - `SENTRY_DSN`, `SENTRY_ENVIRONMENT`: error reporting, off when unset.
+
+## Security
+
+What reaches the backend for each event is the app, the time, the category, the action, the tenant, the platform and the pseudonymous user id. Every request comes from the bridge's own address, so neither backend learns where users are. The logs carry an event's routing key, message id and the error, not its body, except for a message that is not JSON: the RabbitMQ client logs its first 100 characters at error level, which also go to Sentry when it is on.
+
+- Keep `PSEUDONYM_PEPPER` in a secret store. Anyone holding it can check whether a known address is a given user id.
+- Give Matomo a dedicated user with `write` access to the app sites only, and use its token, not a superuser's. `write` is the lowest access that accepts the past timestamps the bridge sends; with `view` access Matomo refuses every hit, and the bridge dead letters them.
+- Give PostHog the public project API key, the one browsers use, never a personal API key. The bridge turns off GeoIP on its events, so PostHog does not place every user at the bridge's location.
+- Only apps should be allowed to publish on the `user-activity` exchange. Anyone who can publish there can add activity for any user, so restrict it with RabbitMQ permissions on the vhost.
+- The container runs as an unprivileged user, and only the probe and metrics ports listen. Neither takes input beyond the path.
 
 ## Delivery
 

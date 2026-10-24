@@ -43,6 +43,7 @@ describe('posthogTracker', () => {
               distinct_id: 'f'.repeat(64),
               timestamp: '2026-10-24T10:30:00.000Z',
               properties: {
+                $geoip_disable: true,
                 app: 'chat',
                 category: 'foreground',
                 tenant: 'org.example.com',
@@ -53,7 +54,11 @@ describe('posthogTracker', () => {
               event: 'activity',
               distinct_id: 'e'.repeat(64),
               timestamp: '2026-10-24T10:31:00.000Z',
-              properties: { app: 'sso', category: 'unclassified' }
+              properties: {
+                $geoip_disable: true,
+                app: 'sso',
+                category: 'unclassified'
+              }
             }
           ]
         }
