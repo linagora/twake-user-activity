@@ -19,16 +19,48 @@ Node 24 is required.
 
 ```bash
 npm install
-npm run dev     # starts the service, reading .env when present
-npm run check   # lint, format check, type check, tests and build
+docker compose up -d   # RabbitMQ, which the tests and the service need
+npm run dev            # starts the service, reading .env when present
+npm run check          # lint, format check, type check, tests and build
 ```
 
-The probes answer on port 8080 (`/health/live`, `/health/ready`) and Prometheus metrics on port 9464 (`/metrics`).
+The probes answer on port 8080 (`/health/live`, `/health/ready`) and Prometheus metrics on port 9464 (`/metrics`). Readiness turns on once the queue is subscribed.
+
+## Events
+
+An app reports that it saw a user by publishing a [CloudEvent](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md) on the `user-activity` topic exchange, with the event type as routing key.
+
+- `type`: `com.twake.<app>.user.active.v1`, where `<app>` is lowercase, for example `com.twake.mail.user.active.v1`.
+- `time`: when the user was seen.
+- `twakeactor`: the user's email. Required.
+- `twakeactorid`: the user's id. Optional.
+- `twakeorg`: the tenant. Optional.
+- `data.category`: `foreground` or `background`. Optional, `unclassified` when absent.
+- `data.action`: a short name for what the user did. Optional.
+
+The bridge binds `com.twake.*.user.active.v1` to the quorum queue `user-activity.ingest`. Its dead letter queue is `user-activity.ingest.dlq`.
+
+- A message that is not JSON goes to the dead letter queue.
+- A JSON message that is not a valid activity is logged and dropped.
+- An event the backend refuses goes to the dead letter queue. When the backend refuses a whole batch, the bridge splits it until only the refused events are left.
+- Any other failure retries in the process with a capped backoff, so a backend outage holds messages in the queue. A message still there after 72 hours goes to the dead letter queue.
 
 ## Configuration
 
 All settings come from the environment and are checked at startup. An invalid environment stops the process and lists every invalid key.
 
+- `AMQP_URL`: RabbitMQ URL. Required.
+- `PSEUDONYM_PEPPER`: secret used for the HMAC of the email, at least 32 characters. Required. Changing it turns every user into a new one in the backend.
+- `ANALYTICS_BACKEND`: `matomo` (default) or `posthog`. Only the selected backend's settings are required.
+- `MATOMO_URL`, `MATOMO_TOKEN`: Matomo base URL and a token allowed to track on every site.
+- `MATOMO_SITES`: JSON map of app to Matomo site id, for example `{"mail":3,"chat":2}`. Events from an app missing here are dead lettered.
+- `MATOMO_TENANT_DIMENSION`: id of the custom dimension that stores the tenant. Optional.
+- `POSTHOG_HOST`, `POSTHOG_API_KEY`: PostHog ingestion host and project API key.
+- `AMQP_EXCHANGE`, `AMQP_QUEUE`, `AMQP_DEAD_LETTER_EXCHANGE`: `user-activity`, `user-activity.ingest` and `<queue>.dlx` by default.
+- `AMQP_PREFETCH`: deliveries each replica holds, `100` by default.
+- `AMQP_MESSAGE_TTL_MS`, `AMQP_DELIVERY_LIMIT`: 72 hours and `20` by default.
+- `BATCH_SIZE`, `BATCH_WAIT_MS`: hits per backend request and how long a batch waits to fill, `100` and `1000` by default. `BATCH_SIZE` cannot exceed `AMQP_PREFETCH`.
+- `ANALYTICS_TIMEOUT_MS`: backend request timeout, `10000` by default.
 - `HTTP_HOST`: address to listen on, `0.0.0.0` by default.
 - `HTTP_PORT`: probe port, `8080` by default.
 - `METRICS_PORT`: metrics port, `9464` by default.

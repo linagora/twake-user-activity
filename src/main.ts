@@ -2,6 +2,12 @@ import * as Sentry from '@sentry/node'
 import { createServer, handleSignals } from '@linagora/twake-node-server'
 import { pino } from 'pino'
 import { loadConfig } from './config.ts'
+import { consumerAlive, consumerStats, startConsumer } from './infra/amqp.ts'
+import { backendStats, registerMetrics } from './infra/metrics.ts'
+import { createBatcher } from './modules/activity/batch.ts'
+import { activityHandler } from './modules/activity/handlers.ts'
+import { ROUTING_KEY } from './modules/activity/schema.ts'
+import { createTracker } from './product/tracker.ts'
 
 const SHUTDOWN_DEADLINE_MS = 25_000
 
@@ -12,22 +18,52 @@ const lifecycle = handleSignals({
   deadlineMs: SHUTDOWN_DEADLINE_MS
 })
 
+const consumer = consumerStats()
+const calls = backendStats()
 let accepting = false
+let isAlive = () => true
+
 const server = createServer({
   logger,
-  isReady: () => Promise.resolve(accepting)
+  isReady: () => Promise.resolve(accepting && consumer.isSubscribed()),
+  isAlive: () => isAlive()
 })
 await server.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT })
 const metrics = createServer({ logger, isReady: () => Promise.resolve(true) })
-metrics.get('/metrics', (_request, reply) =>
-  reply.type('text/plain; version=0.0.4; charset=utf-8').send('')
-)
+registerMetrics(metrics, { consumer, backend: config.backend.kind, calls })
 await metrics.listen({ host: config.HTTP_HOST, port: config.METRICS_PORT })
+
+const batcher = createBatcher({
+  tracker: createTracker(config.backend, {
+    timeoutMs: config.ANALYTICS_TIMEOUT_MS,
+    stats: calls
+  }),
+  size: config.BATCH_SIZE,
+  waitMs: config.BATCH_WAIT_MS
+})
+const handle = activityHandler({
+  pepper: config.PSEUDONYM_PEPPER,
+  track: hit => batcher.submit(hit)
+})
+
+const client = await startConsumer(
+  config,
+  logger,
+  consumer,
+  ROUTING_KEY,
+  handle
+)
+isAlive = consumerAlive(client, consumer)
 accepting = true
-logger.info('started')
+logger.info(
+  { queue: config.AMQP_QUEUE, backend: config.backend.kind },
+  'consuming from RabbitMQ'
+)
 
 lifecycle.started(async () => {
   accepting = false
+  // The deliveries in flight wait for their batch, which the flush sends.
+  await Promise.all([client.close(), batcher.flush()])
   await Promise.all([server.close(), metrics.close()])
   await Sentry.flush(2000)
 })
