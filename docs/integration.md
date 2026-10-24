@@ -36,7 +36,8 @@ A [CloudEvent 1.0](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/s
   "data": {
     "category": "foreground",
     "action": "share-by-link",
-    "platform": "mobile"
+    "platform": "mobile",
+    "ip": "203.0.113.7"
   }
 }
 ```
@@ -48,6 +49,7 @@ A [CloudEvent 1.0](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/s
 - `data.category` is `foreground` when the user is looking at the app, `background` otherwise.
 - `data.action` is what the user did, for example `share-by-link` or `share-by-email`. Keep the list short and stable per app: each value becomes a row in the reports.
 - `data.platform` is `web`, `desktop` or `mobile`.
+- `data.ip` is the user's IP address, when the app has it and wants per user location in the reports. Take it from the user's request (behind a proxy, the client address that your own proxy adds, not one the client could have written itself), never your server's own address. Without it, the reports do not know where the user is.
 
 Only `type`, `time` and `twakeactor` are required, plus the CloudEvents attributes `specversion`, `id` and `source`. The README lists what happens to an event the bridge cannot use.
 

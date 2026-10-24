@@ -25,9 +25,11 @@ export function posthogTracker(options: PostHogOptions): Tracker {
             distinct_id: hit.user,
             timestamp: hit.time.toISOString(),
             properties: {
-              // Every request comes from the bridge, so its IP says nothing
-              // about where the user is.
-              $geoip_disable: true,
+              // Every request comes from the bridge, so without the app's
+              // address the request IP says nothing about where the user is.
+              ...(hit.ip === undefined
+                ? { $geoip_disable: true }
+                : { $ip: hit.ip }),
               app: hit.app,
               category: hit.category,
               ...(hit.tenant !== undefined && { tenant: hit.tenant }),

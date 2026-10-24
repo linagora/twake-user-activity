@@ -8,6 +8,8 @@ export interface Hit {
   action: string
   tenant?: string
   platform?: Platform
+  /** The user's IP address as the app saw it, for the backend's geolocation. */
+  ip?: string
 }
 
 export const PLATFORMS = ['web', 'desktop', 'mobile'] as const
