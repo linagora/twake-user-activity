@@ -57,6 +57,13 @@ describe('activityHandler', () => {
     })
     expect(hits[0]).not.toHaveProperty('tenant')
     expect(hits[0]).not.toHaveProperty('platform')
+    expect(hits[0]).not.toHaveProperty('ip')
+  })
+
+  it('passes on the user address the app sent', async () => {
+    const { hits, handle } = handler()
+    await handle(event({ data: { ip: '203.0.113.7' } }))
+    expect(hits[0]).toMatchObject({ ip: '203.0.113.7' })
   })
 
   it.each([
@@ -65,6 +72,7 @@ describe('activityHandler', () => {
     ['another event type', { type: 'com.twake.mail.user.created.v1' }],
     ['an unknown category', { data: { category: 'idle' } }],
     ['an unknown platform', { data: { platform: 'tv' } }],
+    ['an address that is not an IP', { data: { ip: 'example.com' } }],
     ['not a CloudEvent', { specversion: '0.3' }]
   ])('drops an event with %s', async (_name, overrides) => {
     const { hits, handle } = handler()

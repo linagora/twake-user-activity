@@ -21,7 +21,8 @@ describe('posthogTracker', () => {
         category: 'foreground',
         action: 'message.sent',
         tenant: 'org.example.com',
-        platform: 'web'
+        platform: 'web',
+        ip: '2001:db8::7'
       },
       {
         app: 'sso',
@@ -43,7 +44,7 @@ describe('posthogTracker', () => {
               distinct_id: 'f'.repeat(64),
               timestamp: '2026-10-24T10:30:00.000Z',
               properties: {
-                $geoip_disable: true,
+                $ip: '2001:db8::7',
                 app: 'chat',
                 category: 'foreground',
                 tenant: 'org.example.com',

@@ -59,6 +59,7 @@ An app reports that it saw a user by publishing a [CloudEvent](https://github.co
 - `data.category`: `foreground` or `background`. Optional, `unclassified` when absent.
 - `data.action`: a short name for what the user did. Optional.
 - `data.platform`: `web`, `desktop` or `mobile`, the client the user was on. Optional.
+- `data.ip`: the user's IPv4 or IPv6 address as the app saw it, for the backend's geolocation. Optional.
 
 The bridge binds `com.twake.*.user.active.v1` to the quorum queue `user-activity.ingest`. Its dead letter queue is `user-activity.ingest.dlq`.
 
@@ -91,11 +92,11 @@ All settings come from the environment and are checked at startup. An invalid en
 
 ## Security
 
-What reaches the backend for each event is the app, the time, the category, the action, the tenant, the platform and the pseudonymous user id. Every request comes from the bridge's own address, so neither backend learns where users are. The logs carry an event's routing key, message id and the error, not its body, except for a message that is not JSON: the RabbitMQ client logs its first 100 characters at error level, which also go to Sentry when it is on.
+What reaches the backend for each event is the app, the time, the category, the action, the tenant, the platform, the pseudonymous user id, and the user's IP address when the app sent one. Without it, the backend only sees the bridge's own IP address and learns nothing about where users are. An IP address is personal data. Matomo applies its IP anonymization setting to it; check your PostHog project's IP settings before apps start sending it. The logs carry an event's routing key, message id and the error, not its body, except for a message that is not JSON: the RabbitMQ client logs its first 100 characters at error level, which also go to Sentry when it is on.
 
 - Keep `PSEUDONYM_PEPPER` in a secret store. Anyone holding it can check whether a known address is a given user id.
-- Give Matomo a dedicated user with `write` access to the app sites only, and use its token, not a superuser's. `write` is the lowest access that accepts the past timestamps the bridge sends; with `view` access Matomo refuses every hit, and the bridge dead letters them.
-- Give PostHog the public project API key, the one browsers use, never a personal API key. The bridge turns off GeoIP on its events, so PostHog does not place every user at the bridge's location.
+- Give Matomo a dedicated user with `write` access to the app sites only, and use its token, not a superuser's. `write` is the lowest access that accepts the past timestamps and user IP addresses the bridge sends; with `view` access Matomo refuses every hit, and the bridge dead letters them.
+- Give PostHog the public project API key, the one browsers use, never a personal API key. For an event without an IP address, the bridge turns off GeoIP, so PostHog does not place the user at the bridge's location.
 - Only apps should be allowed to publish on the `user-activity` exchange. Anyone who can publish there can add activity for any user, so restrict it with RabbitMQ permissions on the vhost.
 - The container runs as an unprivileged user, and only the probe and metrics ports listen. Neither takes input beyond the path.
 

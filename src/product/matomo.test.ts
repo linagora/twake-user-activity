@@ -58,6 +58,15 @@ describe('matomoTracker', () => {
     })
   })
 
+  it('forwards the user address the app sent', async () => {
+    const { fetch, calls } = stubFetch(
+      json({ status: 'success', invalid_indices: [] })
+    )
+    await tracker(fetch).track([hit({ ip: '203.0.113.7' })])
+    const [request] = (calls[0]?.body as { requests: string[] }).requests
+    expect(new URLSearchParams(request).get('cip')).toBe('203.0.113.7')
+  })
+
   it('leaves out a dimension the config lacks', async () => {
     const { fetch, calls } = stubFetch(
       json({ status: 'success', invalid_indices: [] })

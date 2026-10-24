@@ -44,6 +44,8 @@ export function trackingQuery(
     // fetch's default "node" does.
     ua: USER_AGENT
   })
+  // Only a token with write access may override the visitor's address.
+  if (hit.ip !== undefined) params.set('cip', hit.ip)
   for (const field of ['tenant', 'platform'] as const) {
     const id = dimensions[field]
     const value = hit[field]

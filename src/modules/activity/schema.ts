@@ -18,7 +18,8 @@ const activity = z.object({
     .object({
       category: z.enum(['background', 'foreground']).optional(),
       action: z.string().min(1).max(255).optional(),
-      platform: z.enum(PLATFORMS).optional()
+      platform: z.enum(PLATFORMS).optional(),
+      ip: z.union([z.ipv4(), z.ipv6()]).optional()
     })
     .default({})
 })
@@ -30,6 +31,7 @@ export interface Activity {
   category?: 'background' | 'foreground'
   action?: string
   platform?: Platform
+  ip?: string
   org?: string
 }
 
@@ -53,6 +55,7 @@ export function parseActivity(event: CloudEvent): ActivityResult {
       ...(data.category !== undefined && { category: data.category }),
       ...(data.action !== undefined && { action: data.action }),
       ...(data.platform !== undefined && { platform: data.platform }),
+      ...(data.ip !== undefined && { ip: data.ip }),
       ...(twakeorg !== undefined && { org: twakeorg })
     }
   }
