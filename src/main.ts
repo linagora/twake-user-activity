@@ -6,7 +6,7 @@ import { consumerAlive, consumerStats, startConsumer } from './infra/amqp.ts'
 import { backendStats, registerMetrics } from './infra/metrics.ts'
 import { createBatcher } from './modules/activity/batch.ts'
 import { configuredSources } from './modules/sources.ts'
-import { createTracker } from './product/tracker.ts'
+import { createTracker, reportsOn } from './product/tracker.ts'
 
 const SHUTDOWN_DEADLINE_MS = 25_000
 
@@ -42,7 +42,8 @@ const batcher = createBatcher({
 })
 const sources = configuredSources(config, {
   pepper: config.PSEUDONYM_PEPPER,
-  track: hit => batcher.submit(hit)
+  track: hit => batcher.submit(hit),
+  tracks: reportsOn(config.backend)
 })
 
 const client = await startConsumer(config, logger, consumer, sources)

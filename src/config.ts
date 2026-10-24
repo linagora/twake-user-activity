@@ -111,6 +111,9 @@ const configSchema = z
     AMQP_DELIVERY_LIMIT: count(1).default(20),
     // Cloudery's exchange; unset, the bridge does not record paying status.
     BILLING_EXCHANGE: optionalName,
+    // The apps' feed exchange, usually activity; unset, its events are not
+    // counted.
+    FEED_EXCHANGE: optionalName,
     ANALYTICS_TIMEOUT_MS: count(1).default(10_000),
     BATCH_SIZE: count(1).default(100),
     BATCH_WAIT_MS: count(0).default(1000),
@@ -134,13 +137,22 @@ const configSchema = z
   })
   .and(backend)
   .superRefine((env, ctx) => {
-    // The exchange is what tells a subscription change from an activity.
-    if (env.BILLING_EXCHANGE === env.AMQP_EXCHANGE) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['BILLING_EXCHANGE'],
-        message: 'must differ from AMQP_EXCHANGE'
-      })
+    // The exchange is what tells one kind of message from another.
+    const seen = new Set([
+      env.AMQP_EXCHANGE,
+      env.AMQP_DEAD_LETTER_EXCHANGE ?? `${env.AMQP_QUEUE}.dlx`
+    ])
+    for (const key of ['BILLING_EXCHANGE', 'FEED_EXCHANGE'] as const) {
+      const exchange = env[key]
+      if (exchange === undefined) continue
+      if (seen.has(exchange)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'must differ from the other exchanges'
+        })
+      }
+      seen.add(exchange)
     }
     if (
       env.BILLING_EXCHANGE !== undefined &&

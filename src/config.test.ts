@@ -84,6 +84,17 @@ describe('loadConfig', () => {
         MATOMO_SITES: '{"mail":3,"billing":5}'
       })
     ).toThrow(/BILLING_EXCHANGE/)
+    expect(() =>
+      loadConfig({
+        ...matomo,
+        BILLING_EXCHANGE: 'billing',
+        FEED_EXCHANGE: 'billing',
+        MATOMO_SITES: '{"mail":3,"billing":5}'
+      })
+    ).toThrow(/FEED_EXCHANGE/)
+    expect(() =>
+      loadConfig({ ...matomo, FEED_EXCHANGE: 'user-activity.ingest.dlx' })
+    ).toThrow(/FEED_EXCHANGE/)
   })
 
   it('reads the Matomo dimensions and refuses unknown ones', () => {

@@ -8,6 +8,7 @@ import { consumerStats, startConsumer } from './infra/amqp.ts'
 import { createBatcher } from './modules/activity/batch.ts'
 import { ROUTING_KEY as BILLING_ROUTING_KEY } from './modules/billing/handlers.ts'
 import { configuredSources } from './modules/sources.ts'
+import { reportsOn } from './product/tracker.ts'
 import { fakeTracker } from './product/fake.ts'
 
 // Against a real broker: docker compose up rabbitmq, or the one CI starts.
@@ -45,6 +46,7 @@ async function start() {
     AMQP_EXCHANGE: name,
     AMQP_QUEUE: `${name}.ingest`,
     BILLING_EXCHANGE: `${name}.billing`,
+    FEED_EXCHANGE: `${name}.feed`,
     BATCH_WAIT_MS: '20',
     MATOMO_URL: 'http://matomo.invalid',
     MATOMO_TOKEN: 'unused',
@@ -61,20 +63,25 @@ async function start() {
     publisher.publish(name, String(body.type), body)
   const publishBilling = (body: Record<string, unknown>) =>
     publisher.publish(`${name}.billing`, BILLING_ROUTING_KEY, body)
-  // The bridge only checks for the billing exchange, so stand in for cloudery,
-  // whose first publish declares it. Nothing is bound yet: this one is dropped.
+  const publishFeed = (body: Record<string, unknown>) =>
+    publisher.publish(`${name}.feed`, String(body.type), body)
+  // The bridge only checks for the exchanges others own, so stand in for their
+  // owners, whose first publish declares them. Nothing is bound yet: these
+  // are dropped.
   await publishBilling({})
+  await publishFeed({})
   const consumer = await startConsumer(
     config,
     logger,
     stats,
     configuredSources(config, {
       pepper: config.PSEUDONYM_PEPPER,
-      track: hit => batcher.submit(hit)
+      track: hit => batcher.submit(hit),
+      tracks: reportsOn(config.backend)
     })
   )
   clients.push(consumer)
-  return { tracker, stats, publish, publishBilling }
+  return { tracker, stats, publish, publishBilling, publishFeed }
 }
 
 describe('consumer', () => {
@@ -98,6 +105,19 @@ describe('consumer', () => {
     })
     await until(() => tracker.hits.length === 1)
     expect(tracker.hits[0]).toMatchObject({ app: 'billing', paying: true })
+  })
+
+  it('counts what a person did from the feed exchange', async () => {
+    const { tracker, publishFeed } = await start()
+    await publishFeed(
+      event('mail', { type: 'com.twake.mail.space.provisioned.v1' })
+    )
+    await publishFeed(event('mail', { type: 'com.twake.mail.message.sent.v1' }))
+    await until(() => tracker.hits.length === 1)
+    expect(tracker.hits[0]).toMatchObject({
+      app: 'mail',
+      action: 'message.sent'
+    })
   })
 
   it('drops a malformed event and keeps consuming', async () => {

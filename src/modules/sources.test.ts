@@ -6,13 +6,18 @@ function route() {
   const hits: Hit[] = []
   const handle = routeMessages(
     configuredSources(
-      { AMQP_EXCHANGE: 'user-activity', BILLING_EXCHANGE: 'billing' },
+      {
+        AMQP_EXCHANGE: 'user-activity',
+        BILLING_EXCHANGE: 'billing',
+        FEED_EXCHANGE: undefined
+      },
       {
         pepper: 'a-pepper-that-is-at-least-32-characters',
         track: hit => {
           hits.push(hit)
           return Promise.resolve()
-        }
+        },
+        tracks: () => true
       }
     )
   )
@@ -22,10 +27,14 @@ function route() {
 const changed = { internalEmail: 'alice@example.com', isPaying: true }
 
 describe('configuredSources', () => {
-  it('reads only the bridge exchange when billing is off', () => {
+  it('reads only the bridge exchange when the others are off', () => {
     const sources = configuredSources(
-      { AMQP_EXCHANGE: 'user-activity', BILLING_EXCHANGE: undefined },
-      { pepper: 'unused', track: () => Promise.resolve() }
+      {
+        AMQP_EXCHANGE: 'user-activity',
+        BILLING_EXCHANGE: undefined,
+        FEED_EXCHANGE: undefined
+      },
+      { pepper: 'unused', track: () => Promise.resolve(), tracks: () => true }
     )
     expect(sources.map(source => source.exchange)).toEqual(['user-activity'])
   })
