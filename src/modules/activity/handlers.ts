@@ -2,7 +2,8 @@ import { createHmac } from 'node:crypto'
 import { parseCloudEvent } from '../../events/envelope.ts'
 import { MalformedEventError } from '../../events/errors.ts'
 import type { Hit } from '../../product/port.ts'
-import { parseActivity, type Activity } from './schema.ts'
+import type { Source, SourceDeps } from '../sources.ts'
+import { parseActivity, ROUTING_KEY, type Activity } from './schema.ts'
 
 // Matomo records an event only when both its category and action are set.
 export const UNCLASSIFIED = 'unclassified'
@@ -28,10 +29,19 @@ export function toHit(activity: Activity, pepper: string): Hit {
   }
 }
 
-export function activityHandler(deps: {
-  pepper: string
-  track: (hit: Hit) => Promise<void>
-}): (body: unknown) => Promise<void> {
+export function activitySource(exchange: string, deps: SourceDeps): Source {
+  const handle = activityHandler(deps)
+  return {
+    exchange,
+    routingKeys: [ROUTING_KEY],
+    passive: false,
+    handle: body => handle(body)
+  }
+}
+
+export function activityHandler(
+  deps: SourceDeps
+): (body: unknown) => Promise<void> {
   return async body => {
     const envelope = parseCloudEvent(body)
     if (!envelope.ok) throw new MalformedEventError(envelope.error)

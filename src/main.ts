@@ -5,8 +5,7 @@ import { loadConfig } from './config.ts'
 import { consumerAlive, consumerStats, startConsumer } from './infra/amqp.ts'
 import { backendStats, registerMetrics } from './infra/metrics.ts'
 import { createBatcher } from './modules/activity/batch.ts'
-import { ROUTING_KEY } from './modules/activity/schema.ts'
-import { routeMessages } from './modules/router.ts'
+import { configuredSources } from './modules/sources.ts'
 import { createTracker } from './product/tracker.ts'
 
 const SHUTDOWN_DEADLINE_MS = 25_000
@@ -41,23 +40,20 @@ const batcher = createBatcher({
   size: config.BATCH_SIZE,
   waitMs: config.BATCH_WAIT_MS
 })
-const handle = routeMessages({
+const sources = configuredSources(config, {
   pepper: config.PSEUDONYM_PEPPER,
-  billingExchange: config.BILLING_EXCHANGE,
   track: hit => batcher.submit(hit)
 })
 
-const client = await startConsumer(
-  config,
-  logger,
-  consumer,
-  ROUTING_KEY,
-  handle
-)
+const client = await startConsumer(config, logger, consumer, sources)
 isAlive = consumerAlive(client, consumer)
 accepting = true
 logger.info(
-  { queue: config.AMQP_QUEUE, backend: config.backend.kind },
+  {
+    queue: config.AMQP_QUEUE,
+    exchanges: sources.map(source => source.exchange),
+    backend: config.backend.kind
+  },
   'consuming from RabbitMQ'
 )
 
