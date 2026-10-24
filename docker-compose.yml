@@ -1,0 +1,8 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    # The image sets no USER, so without it the broker runs as root.
+    user: '999:999'
+    ports:
+      - '5672:5672'
+      - '15672:15672'

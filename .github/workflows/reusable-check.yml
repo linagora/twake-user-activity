@@ -10,6 +10,18 @@ jobs:
   check:
     runs-on: linagora
     timeout-minutes: 15
+    services:
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        # The image sets no USER, so without --user the broker runs as root.
+        options: >-
+          --user 999:999
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 24
+        ports:
+          - 5672
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -19,3 +31,6 @@ jobs:
       - run: npm ci --no-fund
       - run: npm audit
       - run: npm run check
+        env:
+          # The job context is only readable from steps.
+          TEST_AMQP_URL: amqp://guest:guest@localhost:${{ job.services.rabbitmq.ports['5672'] }}
