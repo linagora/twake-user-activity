@@ -13,6 +13,9 @@ flowchart LR
   bridge -->|batched| backend["Matomo or PostHog"]
 ```
 
+- [Reporting user activity from an app](docs/integration.md), for app developers.
+- [Running the bridge](docs/operations.md): probes, metrics, alerts and the dead letter queue.
+
 ## Development
 
 Node 24 is required.
