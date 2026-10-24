@@ -20,7 +20,7 @@ describe('posthogTracker', () => {
         time: new Date('2026-10-24T10:30:00Z'),
         category: 'foreground',
         action: 'message.sent',
-        tenant: 'org.example.com',
+        tenant: 'acme123',
         platform: 'web',
         ip: '2001:db8::7'
       },
@@ -47,7 +47,8 @@ describe('posthogTracker', () => {
                 $ip: '2001:db8::7',
                 app: 'chat',
                 category: 'foreground',
-                tenant: 'org.example.com',
+                tenant: 'acme123',
+                $groups: { organization: 'acme123' },
                 platform: 'web'
               }
             },

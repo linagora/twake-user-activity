@@ -56,7 +56,7 @@ An app reports that it saw a user by publishing a [CloudEvent](https://github.co
 - `time`: when the user was seen.
 - `twakeactor`: the user's email. Required.
 - `twakeactorid`: the user's id. Optional.
-- `twakeorg`: the tenant. Optional.
+- `twakeorg`: the tenant, the LDAP organization id. Optional, absent for a user with no organization. PostHog also gets it as the event's `organization` group, so with group analytics an insight can count active organizations and break any report down per organization.
 - `data.category`: `foreground` or `background`. Optional, `unclassified` when absent.
 - `data.action`: a short name for what the user did. Optional.
 - `data.platform`: `web`, `desktop` or `mobile`, the client the user was on. Optional.

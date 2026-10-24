@@ -32,7 +32,12 @@ export function posthogTracker(options: PostHogOptions): Tracker {
                 : { $ip: hit.ip }),
               app: hit.app,
               category: hit.category,
-              ...(hit.tenant !== undefined && { tenant: hit.tenant }),
+              // The group too, so group analytics counts organizations, not
+              // only people.
+              ...(hit.tenant !== undefined && {
+                tenant: hit.tenant,
+                $groups: { organization: hit.tenant }
+              }),
               ...(hit.platform !== undefined && { platform: hit.platform }),
               // A person property, so insights can count paying users.
               ...(hit.paying !== undefined && { $set: { paying: hit.paying } })
