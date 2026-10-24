@@ -14,6 +14,7 @@ const APPS = {
   drive: ['upload', 'share-by-link', 'share-by-email']
 } as const
 const TENANTS = ['acme.example.com', 'globex.example.com']
+const PLATFORMS = ['web', 'web', 'desktop', 'mobile']
 const DAY_MS = 86_400_000
 
 const pick = <T>(items: readonly T[]): T =>
@@ -49,7 +50,8 @@ for (let user = 0; user < USERS; user++) {
           twakeorg: tenant,
           data: {
             category: Math.random() < 0.8 ? 'foreground' : 'background',
-            action: pick(actions)
+            action: pick(actions),
+            platform: pick(PLATFORMS)
           }
         },
         { mandatory: true }

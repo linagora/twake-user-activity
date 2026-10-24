@@ -14,7 +14,7 @@ const event = (overrides: Record<string, unknown> = {}) => ({
   twakeactor: 'Alice@Example.com',
   twakeactorid: '6f1c1b5e-0000-4000-8000-000000000001',
   twakeorg: 'org.example.com',
-  data: { category: 'background', action: 'email.read' },
+  data: { category: 'background', action: 'email.read', platform: 'desktop' },
   ...overrides
 })
 
@@ -41,7 +41,8 @@ describe('activityHandler', () => {
         time: new Date('2026-10-24T10:30:00Z'),
         category: 'background',
         action: 'email.read',
-        tenant: 'org.example.com'
+        tenant: 'org.example.com',
+        platform: 'desktop'
       }
     ])
     expect(JSON.stringify(hits)).not.toMatch(/alice/i)
@@ -55,6 +56,7 @@ describe('activityHandler', () => {
       action: 'activity'
     })
     expect(hits[0]).not.toHaveProperty('tenant')
+    expect(hits[0]).not.toHaveProperty('platform')
   })
 
   it.each([
@@ -62,6 +64,7 @@ describe('activityHandler', () => {
     ['no actor', { twakeactor: undefined }],
     ['another event type', { type: 'com.twake.mail.user.created.v1' }],
     ['an unknown category', { data: { category: 'idle' } }],
+    ['an unknown platform', { data: { platform: 'tv' } }],
     ['not a CloudEvent', { specversion: '0.3' }]
   ])('drops an event with %s', async (_name, overrides) => {
     const { hits, handle } = handler()

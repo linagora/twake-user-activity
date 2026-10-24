@@ -22,7 +22,8 @@ export function toHit(activity: Activity, pepper: string): Hit {
     time: activity.time,
     category: activity.category ?? UNCLASSIFIED,
     action: activity.action ?? DEFAULT_ACTION,
-    ...(activity.org !== undefined && { tenant: activity.org })
+    ...(activity.org !== undefined && { tenant: activity.org }),
+    ...(activity.platform !== undefined && { platform: activity.platform })
   }
 }
 

@@ -19,7 +19,8 @@ describe('loadConfig', () => {
       kind: 'matomo',
       url: 'https://matomo.example.com',
       token: 'token',
-      sites: { mail: 3, chat: 2 }
+      sites: { mail: 3, chat: 2 },
+      dimensions: {}
     })
     expect(config.AMQP_EXCHANGE).toBe('user-activity')
     expect(config.AMQP_QUEUE).toBe('user-activity.ingest')
@@ -59,6 +60,22 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...matomo, MATOMO_SITES: '{"Mail":3}' })).toThrow(
       /MATOMO_SITES/
     )
+  })
+
+  it('reads the Matomo dimensions and refuses unknown ones', () => {
+    const config = loadConfig({
+      ...matomo,
+      MATOMO_DIMENSIONS: '{"tenant":1,"platform":2}'
+    })
+    expect(config.backend).toMatchObject({
+      dimensions: { tenant: 1, platform: 2 }
+    })
+    expect(() =>
+      loadConfig({ ...matomo, MATOMO_DIMENSIONS: '{"device":3}' })
+    ).toThrow(/MATOMO_DIMENSIONS/)
+    expect(() =>
+      loadConfig({ ...matomo, MATOMO_DIMENSIONS: '{"tenant":1,"platform":1}' })
+    ).toThrow(/MATOMO_DIMENSIONS/)
   })
 
   it('refuses a batch larger than the deliveries a replica holds', () => {

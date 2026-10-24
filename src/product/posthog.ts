@@ -27,7 +27,8 @@ export function posthogTracker(options: PostHogOptions): Tracker {
             properties: {
               app: hit.app,
               category: hit.category,
-              ...(hit.tenant !== undefined && { tenant: hit.tenant })
+              ...(hit.tenant !== undefined && { tenant: hit.tenant }),
+              ...(hit.platform !== undefined && { platform: hit.platform })
             }
           }))
         },

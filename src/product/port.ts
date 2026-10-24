@@ -7,7 +7,11 @@ export interface Hit {
   category: string
   action: string
   tenant?: string
+  platform?: Platform
 }
+
+export const PLATFORMS = ['web', 'desktop', 'mobile'] as const
+export type Platform = (typeof PLATFORMS)[number]
 
 export interface TrackResult {
   /** Indices of the hits the backend refused for good. */

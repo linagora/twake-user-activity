@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs the Matomo of `docker compose --profile matomo up`, gives each app a
-# site and a tenant dimension, and prints the bridge settings for .env.
+# site with tenant and platform dimensions, and prints the bridge settings for .env.
 # Safe to run again: it only creates what is missing.
 #
 #   scripts/matomo-setup.sh >> .env
@@ -66,15 +66,15 @@ site_id() {
       const site = sites.find(s => s.name === process.argv[1]);
       if (site) console.log(site.idsite)' "$1"
 }
-tenant_dimension() {
+dimension_id() {
   api -d method=CustomDimensions.getConfiguredCustomDimensions -d idSite="$1" |
     node -e 'const dims = JSON.parse(require("fs").readFileSync(0, "utf8"));
-      const dim = dims.find(d => d.name === "tenant");
-      if (dim) console.log(dim.idcustomdimension)'
+      const dim = dims.find(d => d.name === process.argv[1]);
+      if (dim) console.log(dim.idcustomdimension)' "$2"
 }
 
 sites=()
-dimension=''
+declare -A dimensions=()
 for app in $APPS; do
   id="$(site_id "$app")"
   if [[ -z "$id" ]]; then
@@ -82,19 +82,22 @@ for app in $APPS; do
       --data-urlencode "urls[0]=https://$app.example.com" >/dev/null
     id="$(site_id "$app")"
   fi
-  dim="$(tenant_dimension "$id")"
-  if [[ -z "$dim" ]]; then
-    api -d method=CustomDimensions.configureNewCustomDimension -d idSite="$id" \
-      -d name=tenant -d scope=visit -d active=1 >/dev/null
-    dim="$(tenant_dimension "$id")"
-  fi
-  # The bridge takes one dimension number for every site, and Matomo numbers
-  # dimensions per site, so a site with other dimensions can disagree.
-  if [[ -n "$dimension" && "$dim" != "$dimension" ]]; then
-    echo "site $app has tenant as dimension $dim, other sites as $dimension" >&2
-    exit 1
-  fi
-  dimension="$dim"
+  for name in tenant platform; do
+    dim="$(dimension_id "$id" "$name")"
+    if [[ -z "$dim" ]]; then
+      api -d method=CustomDimensions.configureNewCustomDimension -d idSite="$id" \
+        -d name="$name" -d scope=visit -d active=1 >/dev/null
+      dim="$(dimension_id "$id" "$name")"
+    fi
+    [[ -n "$dim" ]] || { echo "could not create dimension $name on site $app" >&2; exit 1; }
+    # The bridge takes one dimension number for every site, and Matomo numbers
+    # dimensions per site, so a site with other dimensions can disagree.
+    if [[ -n "${dimensions[$name]:-}" && "$dim" != "${dimensions[$name]}" ]]; then
+      echo "site $app has $name as dimension $dim, other sites as ${dimensions[$name]}" >&2
+      exit 1
+    fi
+    dimensions[$name]="$dim"
+  done
   sites+=("\"$app\":$id")
   echo "site $id: $app" >&2
 done
@@ -103,5 +106,5 @@ echo "ANALYTICS_BACKEND=matomo"
 echo "MATOMO_URL=$MATOMO"
 echo "MATOMO_TOKEN=$token"
 echo "MATOMO_SITES={$(IFS=,; echo "${sites[*]}")}"
-echo "MATOMO_TENANT_DIMENSION=$dimension"
+echo "MATOMO_DIMENSIONS={\"tenant\":${dimensions[tenant]},\"platform\":${dimensions[platform]}}"
 echo "matomo is ready at $MATOMO, login $LOGIN / $PASSWORD" >&2
