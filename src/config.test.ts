@@ -64,6 +64,9 @@ describe('loadConfig', () => {
 
   it('needs a Matomo site for billing only when billing is on', () => {
     expect(loadConfig(matomo).BILLING_EXCHANGE).toBeUndefined()
+    expect(
+      loadConfig({ ...matomo, BILLING_EXCHANGE: '' }).BILLING_EXCHANGE
+    ).toBeUndefined()
     expect(() =>
       loadConfig({ ...matomo, BILLING_EXCHANGE: 'billing' })
     ).toThrow(/"billing" site[\s\S]*MATOMO_SITES/)

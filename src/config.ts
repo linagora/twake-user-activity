@@ -6,6 +6,12 @@ const count = (min: number) =>
 
 const port = count(1).pipe(z.number().max(65535))
 
+// Charts often render an unset value as "", which should mean unset.
+const optionalName = z.preprocess(
+  value => (value === '' ? undefined : value),
+  z.string().min(1).optional()
+)
+
 const json = z.string().transform((value, ctx) => {
   try {
     return JSON.parse(value) as unknown
@@ -97,14 +103,14 @@ const configSchema = z
     AMQP_URL: z.url({ protocol: /^amqps?$/ }),
     AMQP_EXCHANGE: z.string().min(1).default('user-activity'),
     AMQP_QUEUE: z.string().min(1).default('user-activity.ingest'),
-    AMQP_DEAD_LETTER_EXCHANGE: z.string().min(1).optional(),
+    AMQP_DEAD_LETTER_EXCHANGE: optionalName,
     AMQP_PREFETCH: count(1).default(100),
     AMQP_MESSAGE_TTL_MS: count(1).default(HOURS_72_MS),
     // Failures retry in the process, so a redelivery means a crash or a
     // consumer_timeout.
     AMQP_DELIVERY_LIMIT: count(1).default(20),
     // Cloudery's exchange; unset, the bridge does not record paying status.
-    BILLING_EXCHANGE: z.string().min(1).optional(),
+    BILLING_EXCHANGE: optionalName,
     ANALYTICS_TIMEOUT_MS: count(1).default(10_000),
     BATCH_SIZE: count(1).default(100),
     BATCH_WAIT_MS: count(0).default(1000),
