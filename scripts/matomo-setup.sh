@@ -9,7 +9,7 @@ set -euo pipefail
 MATOMO="${MATOMO_URL:-http://127.0.0.1:8081}"
 LOGIN="${MATOMO_ADMIN:-admin}"
 PASSWORD="${MATOMO_ADMIN_PASSWORD:-admin-local-only-1}"
-APPS="${MATOMO_APPS:-mail chat drive calendar}"
+APPS="${MATOMO_APPS:-mail chat drive calendar billing}"
 
 jar="$(mktemp)"
 trap 'rm -f "$jar"' EXIT

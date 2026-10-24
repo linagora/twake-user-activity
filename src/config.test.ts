@@ -62,6 +62,27 @@ describe('loadConfig', () => {
     )
   })
 
+  it('needs a Matomo site for billing only when billing is on', () => {
+    expect(loadConfig(matomo).BILLING_EXCHANGE).toBeUndefined()
+    expect(() =>
+      loadConfig({ ...matomo, BILLING_EXCHANGE: 'billing' })
+    ).toThrow(/"billing" site[\s\S]*MATOMO_SITES/)
+    expect(
+      loadConfig({
+        ...matomo,
+        BILLING_EXCHANGE: 'billing',
+        MATOMO_SITES: '{"mail":3,"billing":5}'
+      }).BILLING_EXCHANGE
+    ).toBe('billing')
+    expect(() =>
+      loadConfig({
+        ...matomo,
+        BILLING_EXCHANGE: 'user-activity',
+        MATOMO_SITES: '{"mail":3,"billing":5}'
+      })
+    ).toThrow(/BILLING_EXCHANGE/)
+  })
+
   it('reads the Matomo dimensions and refuses unknown ones', () => {
     const config = loadConfig({
       ...matomo,

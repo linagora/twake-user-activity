@@ -86,4 +86,20 @@ describe('posthogTracker', () => {
       ])
     ).rejects.toMatchObject({ name: 'ProductError', failure })
   })
+
+  it('sets paying as a person property on a subscription change', async () => {
+    const { fetch, calls } = stubFetch(json({ status: 1 }))
+    await tracker(fetch).track([
+      {
+        app: 'billing',
+        user: 'u',
+        time: new Date(0),
+        category: 'subscription',
+        action: 'subscription-paying',
+        paying: true
+      }
+    ])
+    const [sent] = (calls[0]?.body as { batch: { properties: object }[] }).batch
+    expect(sent?.properties).toMatchObject({ $set: { paying: true } })
+  })
 })
