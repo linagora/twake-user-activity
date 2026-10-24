@@ -1,0 +1,81 @@
+import { describe, expect, it } from 'vitest'
+import { posthogTracker } from './posthog.ts'
+import { json, stubFetch } from './testing.ts'
+
+const tracker = (fetch: typeof globalThis.fetch) =>
+  posthogTracker({
+    host: 'https://eu.i.posthog.com',
+    apiKey: 'phc_key',
+    timeoutMs: 1000,
+    fetch
+  })
+
+describe('posthogTracker', () => {
+  it('sends a batch as one capture request', async () => {
+    const { fetch, calls } = stubFetch(json({ status: 1 }))
+    const result = await tracker(fetch).track([
+      {
+        app: 'chat',
+        user: 'f'.repeat(64),
+        time: new Date('2026-10-24T10:30:00Z'),
+        category: 'foreground',
+        action: 'message.sent',
+        tenant: 'org.example.com'
+      },
+      {
+        app: 'sso',
+        user: 'e'.repeat(64),
+        time: new Date('2026-10-24T10:31:00Z'),
+        category: 'unclassified',
+        action: 'activity'
+      }
+    ])
+    expect(result.refused).toEqual(new Set())
+    expect(calls).toEqual([
+      {
+        url: 'https://eu.i.posthog.com/batch/',
+        body: {
+          api_key: 'phc_key',
+          batch: [
+            {
+              event: 'message.sent',
+              distinct_id: 'f'.repeat(64),
+              timestamp: '2026-10-24T10:30:00.000Z',
+              properties: {
+                app: 'chat',
+                category: 'foreground',
+                tenant: 'org.example.com'
+              }
+            },
+            {
+              event: 'activity',
+              distinct_id: 'e'.repeat(64),
+              timestamp: '2026-10-24T10:31:00.000Z',
+              properties: { app: 'sso', category: 'unclassified' }
+            }
+          ]
+        }
+      }
+    ])
+  })
+
+  it.each([
+    ['an unreachable server', new TypeError('fetch failed'), 'transient'],
+    ['a 502', json({}, 502), 'transient'],
+    ['a refused key', json({}, 401), 'credentials'],
+    ['a 400', json({}, 400), 'permanent']
+  ])('classifies %s', async (_name, response, failure) => {
+    const { fetch } = stubFetch(response)
+    await expect(
+      tracker(fetch).track([
+        {
+          app: 'chat',
+          user: 'u',
+          time: new Date(0),
+          category: 'unclassified',
+          action: 'activity'
+        }
+      ])
+    ).rejects.toMatchObject({ name: 'ProductError', failure })
+  })
+})
