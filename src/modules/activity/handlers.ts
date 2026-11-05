@@ -25,7 +25,10 @@ export function toHit(activity: Activity, pepper: string): Hit {
     action: activity.action ?? DEFAULT_ACTION,
     ...(activity.org !== undefined && { tenant: activity.org }),
     ...(activity.platform !== undefined && { platform: activity.platform }),
-    ...(activity.ip !== undefined && { ip: activity.ip })
+    ...(activity.ip !== undefined && { ip: activity.ip }),
+    ...(activity.properties !== undefined && {
+      properties: activity.properties
+    })
   }
 }
 
@@ -40,13 +43,19 @@ export function activitySource(exchange: string, deps: SourceDeps): Source {
 }
 
 export function activityHandler(
-  deps: Pick<SourceDeps, 'pepper' | 'track'>
+  deps: Pick<SourceDeps, 'pepper' | 'track' | 'logger'>
 ): (body: unknown) => Promise<void> {
   return async body => {
     const envelope = parseCloudEvent(body)
     if (!envelope.ok) throw new MalformedEventError(envelope.error)
     const parsed = parseActivity(envelope.event)
     if (!parsed.ok) throw new MalformedEventError(parsed.error)
+    if (parsed.droppedProperties.length > 0) {
+      deps.logger.warn(
+        { id: envelope.event.id, dropped: parsed.droppedProperties },
+        'dropped properties of an activity'
+      )
+    }
     await deps.track(toHit(parsed.activity, deps.pepper))
   }
 }
