@@ -17,7 +17,7 @@ Each hit is an event named after the hit's action, under the pseudonym as distin
 - `$ip`, the user's IP address, when the app sent one. Without it the bridge turns off GeoIP, so PostHog does not place the user at the bridge's own location.
 - `$set.paying`, on a subscription change, a person property for counting paying users.
 
-An anonymous hit (no user) gets a random UUID as distinct id, per hit, and `$process_person_profile: false`, so PostHog creates no person. It has no `tenant`, `$groups` or `$set`; the other properties stay. It cannot count unique users or follow retention.
+An anonymous hit (no user) gets the `data.visit` of the event as distinct id, or a random UUID per hit without one, and `$process_person_profile: false`, so PostHog creates no person. It has no `tenant`, `$groups` or `$set`; the other properties stay. It counts visits, not users, and cannot follow retention. The visit is sent as distinct id only, never as a property.
 
 PostHog accepts every event of a valid batch, so it never refuses a single hit.
 

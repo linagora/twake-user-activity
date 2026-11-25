@@ -28,6 +28,7 @@ export function toHit(activity: Activity, pepper: string): Hit {
     ...(activity.org !== undefined && { tenant: activity.org }),
     ...(activity.platform !== undefined && { platform: activity.platform }),
     ...(activity.ip !== undefined && { ip: activity.ip }),
+    ...(activity.visit !== undefined && { visit: activity.visit }),
     ...(activity.properties !== undefined && {
       properties: activity.properties
     })

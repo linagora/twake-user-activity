@@ -14,6 +14,8 @@ export interface Hit {
   platform?: Platform
   /** The user's IP address as the app saw it, for the backend's geolocation. */
   ip?: string
+  /** A random id of one browser visit, never a person. Anonymous hits only. */
+  visit?: string
   /** What the app says about the action. Only PostHog records it. */
   properties?: Properties
   /** Set on a subscription change: whether the user now pays. */

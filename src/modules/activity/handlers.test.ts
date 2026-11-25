@@ -200,6 +200,31 @@ describe('an activity without actor', () => {
       action: 'activity'
     })
   })
+
+  const VISIT = '3f2b8c1e-9d4a-4b6e-8f1a-2c3d4e5f6a7b'
+
+  it('carries the visit of the browser to the hit', async () => {
+    const { hits, handle } = handler()
+    await handle(
+      anonymous({ data: { action: 'button.clicked', visit: VISIT } })
+    )
+    expect(hits).toEqual([
+      {
+        app: 'chat',
+        time: new Date('2026-10-24T10:30:00Z'),
+        category: 'unclassified',
+        action: 'button.clicked',
+        visit: VISIT
+      }
+    ])
+  })
+
+  it('is still tracked, without a visit, when the visit is not a UUID', async () => {
+    const { hits, handle } = handler()
+    await handle(anonymous({ data: { visit: 'not-a-uuid' } }))
+    expect(hits).toHaveLength(1)
+    expect(hits[0]).not.toHaveProperty('visit')
+  })
 })
 
 describe('pseudonym', () => {

@@ -52,7 +52,7 @@ export function posthogTracker(options: PostHogOptions): Tracker {
           api_key: options.apiKey,
           batch: hits.map(hit => ({
             event: hit.action,
-            distinct_id: hit.user ?? randomUUID(),
+            distinct_id: hit.user ?? hit.visit ?? randomUUID(),
             timestamp: hit.time.toISOString(),
             properties: {
               // First, so the bridge's own keys win.

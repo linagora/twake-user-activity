@@ -200,6 +200,49 @@ describe('posthogTracker', () => {
       expect(a?.properties).not.toHaveProperty('$set')
     })
 
+    const VISIT = '3f2b8c1e-9d4a-4b6e-8f1a-2c3d4e5f6a7b'
+    const sendOne = async (hit: Record<string, unknown>) => {
+      const { fetch, calls } = stubFetch(json({ status: 1 }))
+      await tracker(fetch).track([hit as unknown as typeof anonymousHit])
+      return (
+        (calls[0]?.body ?? {}) as {
+          batch: {
+            distinct_id: string
+            properties: Record<string, unknown>
+          }[]
+        }
+      ).batch[0]
+    }
+
+    it('is counted under its visit, so a visit is one distinct id', async () => {
+      const { fetch, calls } = stubFetch(json({ status: 1 }))
+      const withVisit = { ...anonymousHit, visit: VISIT } as typeof anonymousHit
+      await tracker(fetch).track([withVisit, withVisit])
+      const { batch } = (calls[0]?.body ?? {}) as {
+        batch: { distinct_id: string }[]
+      }
+      expect(batch.map(sent => sent.distinct_id)).toEqual([VISIT, VISIT])
+    })
+
+    it('with a visit still creates no person, and sends the visit only as distinct id', async () => {
+      const sent = await sendOne({ ...anonymousHit, visit: VISIT })
+      expect(sent?.properties).toEqual({
+        $geoip_disable: true,
+        $process_person_profile: false,
+        app: 'chat',
+        category: 'foreground',
+        platform: 'web',
+        button: 'send'
+      })
+    })
+
+    it('a user hit keeps the user as distinct id, even with a visit', async () => {
+      const sent = await sendOne({ ...anonymousHit, user: 'u', visit: VISIT })
+      expect(sent?.distinct_id).toBe('u')
+      expect(sent?.properties).not.toHaveProperty('$process_person_profile')
+      expect(sent?.properties).not.toHaveProperty('visit')
+    })
+
     it('leaves the events with a user as they are', async () => {
       const { fetch, calls } = stubFetch(json({ status: 1 }))
       await tracker(fetch).track([{ ...anonymousHit, user: 'u' }])
