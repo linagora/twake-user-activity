@@ -61,6 +61,8 @@ const activity = z.object({
       action: z.string().min(1).max(255).optional(),
       platform: z.enum(PLATFORMS).optional(),
       ip: z.union([z.ipv4(), z.ipv6()]).optional(),
+      // A bad visit costs the event nothing: it is dropped.
+      visit: z.uuidv4().optional().catch(undefined),
       properties: z.unknown().optional()
     })
     .default({})
@@ -75,6 +77,7 @@ export interface Activity {
   action?: string
   platform?: Platform
   ip?: string
+  visit?: string
   properties?: Properties
   org?: string
 }
@@ -108,6 +111,7 @@ export function parseActivity(event: CloudEvent): ActivityResult {
       ...(data.action !== undefined && { action: data.action }),
       ...(data.platform !== undefined && { platform: data.platform }),
       ...(data.ip !== undefined && { ip: data.ip }),
+      ...(data.visit !== undefined && { visit: data.visit }),
       ...(Object.keys(properties).length > 0 && { properties }),
       ...(twakeactor !== undefined && { email: twakeactor }),
       // Anonymous means anonymous: the org goes with the actor.
